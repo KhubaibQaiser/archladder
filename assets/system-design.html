@@ -1,0 +1,795 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Caseflow System Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: problem header and requirements, tier switcher, zoned architecture canvas, then moves, rejections and load. */
+:root {
+  --bg: #eef1f6; --surface: #ffffff; --surface-2: #f6f8fb; --ink: #141b26; --ink-2: #4d5868; --line: #d3d9e3;
+  --accent: #3157d5; --accent-ink: #ffffff; --wire: #8a95a7;
+  --new: #0d7a4e; --changed: #b35c00; --removed: #a3324a;
+  --z-client: #e4ebff; --z-client-ink: #2f4fb8;
+  --z-edge: #e2f2f7; --z-edge-ink: #106579;
+  --z-app: #e6f4ea; --z-app-ink: #1f6b3a;
+  --z-data: #fdeedc; --z-data-ink: #8a4a06;
+  --z-services: #f1e8fb; --z-services-ink: #6a3aa8;
+  --lane: rgba(20, 27, 38, .035);
+  --shadow: 0 1px 2px rgba(20, 27, 38, .06), 0 4px 14px rgba(20, 27, 38, .06);
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px }
+.wrap { max-width: 1440px; margin: 0 auto; display: grid; gap: 22px }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.15 }
+h1 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 700; letter-spacing: -.01em }
+h2 { font-size: 18px } h3 { font-size: 20px }
+p { margin: 0 }
+.muted { color: var(--ink-2) }
+.eyebrow { font: 600 11px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+button { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+header { display: grid; gap: 10px }
+.ai-warn { border: 1px solid var(--changed); background: color-mix(in srgb, var(--changed) 9%, var(--surface)); border-radius: 12px; padding: 12px 16px; font-size: 14px; max-width: 100%; overflow-wrap: anywhere }
+.ai-warn strong { color: var(--changed) }
+.alts { display: grid; gap: 8px }
+.alts div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--line) }
+.alts span { color: var(--ink-2); font-size: 14px }
+.reqs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px }
+.req { display: inline-flex; gap: 8px; align-items: baseline; min-width: 0; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 13px; max-width: 100% }
+.req b { font: 600 11px var(--font-mono); color: var(--accent); white-space: nowrap; flex: none }
+
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between }
+.tabs { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 5px; flex-wrap: wrap }
+.tab { border: 0; background: transparent; border-radius: 8px; padding: 8px 14px; cursor: pointer; display: grid; gap: 1px; text-align: left; min-height: 44px }
+.tab .t { font: 700 16px var(--font-display) }
+.tab .l { font: 11px var(--font-mono); color: var(--ink-2) }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink) }
+.tab[aria-selected="true"] .l { color: inherit; opacity: .85 }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; min-height: 32px }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent) }
+
+.tier-head { display: grid; gap: 4px }
+.tier-head p { max-width: 85ch }
+
+.canvas-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow-x: auto; box-shadow: var(--shadow) }
+.canvas-fit { position: relative; margin: 0 auto }
+.canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0 }
+.lane { position: absolute; top: 12px; bottom: 12px; border-radius: 12px; background: var(--lane) }
+.lane-head { position: absolute; top: 22px; display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.lane-head i { width: 8px; height: 8px; border-radius: 50% }
+svg.wires { position: absolute; inset: 0; overflow: visible; pointer-events: none }
+.wire { fill: none; stroke: var(--wire); stroke-width: 1.6; transition: opacity .15s, stroke .15s }
+.wire.sync { stroke-dasharray: 7 5 }
+.wire.async { stroke-dasharray: 2 6; stroke-linecap: round; stroke-width: 2.2 }
+.wire-label rect { fill: var(--surface); stroke: var(--line) }
+.wire-label text { fill: var(--ink-2); font: 500 10.5px var(--font-mono) }
+@media (prefers-reduced-motion: no-preference) {
+  .wire.sync { animation: flow 1.4s linear infinite }
+  .wire.async { animation: flow 2.2s linear infinite }
+  @keyframes flow { to { stroke-dashoffset: -24 } }
+}
+
+.node { position: absolute; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; box-shadow: var(--shadow);
+  transition: transform .15s, opacity .15s, border-color .15s }
+.node:hover { border-color: var(--accent); transform: translateY(-2px) }
+.node .ic { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center }
+.node .ic svg { width: 24px; height: 24px }
+.node .nm { font: 600 14px/1.25 var(--font-body); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere }
+.node .tc { font: 11px/1.35 var(--font-mono); color: var(--ink-2); margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.node .st { z-index: 1; position: absolute; top: -9px; right: 10px; font: 700 9.5px var(--font-mono); letter-spacing: .08em; padding: 3px 7px; border-radius: 99px; color: var(--surface) }
+.node.new { border-color: var(--new); box-shadow: 0 0 0 3px color-mix(in srgb, var(--new) 22%, transparent), var(--shadow) }
+.node.new .st { background: var(--new) }
+.node.changed { border-color: var(--changed) }
+.node.changed .st { background: var(--changed) }
+.node.removed { border-style: dashed; opacity: .6 }
+.node.removed .st { background: var(--removed) }
+.node.removed .nm { text-decoration: line-through }
+.canvas.hovering .node:not(.hot), .canvas.only-changes:not(.baseline) .node.same { opacity: .32 }
+.canvas.hovering .wire:not(.hot), .canvas.hovering .wire-label:not(.hot) { opacity: .15 }
+.canvas.hovering .wire.hot { stroke: var(--accent) }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 20px; font-size: 12.5px; color: var(--ink-2); padding: 0 4px }
+.legend span { display: inline-flex; align-items: center; gap: 8px }
+.legend svg { width: 34px; height: 8px }
+
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 18px }
+.card.wide { grid-column: 1 / -1 }
+.card li, .card p, .m-body, .m-head h3 { overflow-wrap: anywhere }
+.profile { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px }
+.prof { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere }
+.prof .v { font: 600 14.5px/1.3 var(--font-body) }
+.prof .d { font-size: 13px; color: var(--ink-2) }
+.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; border: 1px solid currentColor }
+.src.repo { color: var(--z-edge-ink) } .src.brief { color: var(--z-client-ink) } .src.user { color: var(--new) } .src.inferred { color: var(--changed) } .src.unknown { color: var(--removed) }
+.driver { font-size: 13px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0 }
+.moves, .rejected { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px }
+.moves li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--changed) }
+.rejected li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--line) }
+.trigger { font: 12px var(--font-mono); color: var(--ink-2) }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2) }
+td.num { font: 13px var(--font-mono); font-variant-numeric: tabular-nums }
+td.cur { color: var(--accent); font-weight: 600 }
+.tablewrap { overflow-x: auto }
+
+dialog { border: 1px solid var(--line); border-radius: 18px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(0, 0, 0, .28) }
+dialog::backdrop { background: rgba(8, 12, 18, .5) }
+.m-head { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 20px 20px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface) }
+.m-head .ic { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center }
+.m-head .ic svg { width: 30px; height: 30px }
+.m-tech { font: 12px var(--font-mono); color: var(--ink-2); margin-top: 4px }
+.close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; display: grid; place-items: center }
+.close svg { width: 18px; height: 18px }
+.m-body { padding: 18px 20px 22px; display: grid; gap: 18px }
+.pills { display: flex; flex-wrap: wrap; gap: 8px }
+.pill { font: 600 11px var(--font-mono); letter-spacing: .06em; padding: 3px 9px; border-radius: 99px; border: 1px solid currentColor }
+.pill.new { color: var(--new) } .pill.changed { color: var(--changed) } .pill.same { color: var(--ink-2) } .pill.removed { color: var(--removed) }
+.sec { display: grid; gap: 6px }
+.sec h4 { margin: 0; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.sec ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.serves { display: grid; gap: 6px }
+.serves div { background: var(--surface-2); border-radius: 8px; padding: 7px 10px; font-size: 14px }
+.serves b { font: 600 11px var(--font-mono); color: var(--accent); margin-right: 8px; white-space: nowrap }
+.fail { display: grid; gap: 8px }
+.fail div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--removed) }
+.fail span { color: var(--ink-2); font-size: 14px }
+.next { background: var(--surface-2); border-radius: 10px; padding: 12px; display: grid; gap: 4px }
+.conns { display: flex; flex-wrap: wrap; gap: 8px }
+.conn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer; min-height: 32px }
+.conn:hover { border-color: var(--accent) }
+</style>
+
+<div class="wrap">
+  <aside class="ai-warn" role="note"><strong>AI-generated suggestion.</strong> This design was drafted by an AI agent from the project context and the answers it was given. Numbers, costs and vendor limits are estimates. Treat it as a starting point for discussion: verify every choice against current vendor docs and your own measurements before acting on it.</aside>
+  <header>
+    <div class="eyebrow">System design · <span id="stack"></span></div>
+    <h1 id="title"></h1>
+    <p class="muted" id="problem" style="max-width:80ch"></p>
+    <div class="reqs" id="reqs"></div>
+  </header>
+
+  <section style="display:grid;gap:10px" aria-labelledby="prof-h">
+    <h2 id="prof-h">Workload profile <span class="muted" style="font:400 13px var(--font-body)">what drives the design at every tier</span></h2>
+    <div class="profile" id="profile"></div>
+  </section>
+
+  <div class="bar">
+    <div class="tabs" role="tablist" aria-label="Traffic tier" id="tabs"></div>
+    <label class="toggle"><input type="checkbox" id="only" checked> Highlight what changed</label>
+  </div>
+
+  <section class="tier-head" aria-live="polite">
+    <h2 id="tier-title" style="font-size:22px"></h2>
+    <p class="muted" id="tier-summary"></p>
+  </section>
+
+  <div class="canvas-wrap" id="cwrap"><div class="canvas-fit" id="cfit"><div class="canvas only-changes" id="canvas"></div></div></div>
+  <div class="legend" id="legend"></div>
+
+  <div class="grid3">
+    <section class="card"><h2>Recommended moves</h2><ul class="moves" id="moves"></ul></section>
+    <section class="card"><h2>Considered and left out</h2><ul class="rejected" id="rejected"></ul></section>
+    <section class="card wide"><h2>Load assumptions</h2><p class="muted" id="load-note" style="font-size:13.5px"></p><div class="tablewrap"><table id="load"></table></div></section>
+  </div>
+</div>
+
+<dialog id="modal" aria-labelledby="m-name"></dialog>
+
+<script>
+/* Replace only this object for a new design. Every node must name the requirements it serves.
+   zone: one of DESIGN.zones ids (the column). row: 0-based row inside the zone.
+   status: new | changed | same | removed. icon: a key of ICONS below. */
+const DESIGN = {
+  title: "Caseflow System Design",
+  stack: "Next.js 16 on Vercel · Supabase",
+  problem: "Caseflow as the intake CRM of one global legal network: a single organisation with offices on several continents. Staff search and triage contacts, keep notes and an activity timeline, and work a pipeline board together, seeing each other's moves and presence in under a second. Client data stays in its jurisdiction.",
+  requirements: [
+    { id: "R1", text: "Search, filter and urgency-sort contacts, 250 rows per page" },
+    { id: "R2", text: "Pipeline board, Lead / Active / Closed, many editors at once" },
+    { id: "R3", text: "Admin and viewer roles enforced on the server" },
+    { id: "R4", text: "Notes and an activity timeline per contact" },
+    { id: "R5", text: "p95 under 300 ms in every region, works on mobile" },
+    { id: "R6", text: "Board moves and presence show in under 1 s" },
+    { id: "R7", text: "Client data stays in its home jurisdiction" }
+  ],
+  profile: [
+    { label: "Read to write", value: "Read-heavy, about 10:1", source: "inferred", drives: "Indexes, caches and replicas carry the read side. Writes stay on one primary per region for a long time." },
+    { label: "Connection model", value: "Two-way persistent: live board plus presence", source: "user", drives: "Concurrent sockets, not RPS, become the first real limit. Managed realtime first, a gateway fleet at the top tier." },
+    { label: "Freshness", value: "Sub-second for board moves and presence", source: "user", drives: "Rules out polling as the main path. Polling stays only as the degraded mode." },
+    { label: "Tenancy", value: "Single tenant: one organisation, many offices", source: "user", drives: "No customer-level shard key. The home region, then the office, becomes the partition key." },
+    { label: "Geography and data rules", value: "Global from 10k DAU, data stays in its jurisdiction", source: "user", drives: "Residency, not load, forces a second home region at 10k. No replica may copy data across borders." },
+    { label: "Traffic shape", value: "Office hours following the sun, Monday-morning peaks about 3x", source: "inferred", drives: "Each region peaks at a different time, so regions are sized separately. Peak factor 3 in the load numbers." },
+    { label: "Background work", value: "None in the brief today", source: "repo: docs/SPEC.md", drives: "No queue until search indexing needs one at 1M DAU." },
+    { label: "Stack", value: "Next.js 16 on Vercel, Supabase Postgres, Auth and Realtime", source: "repo: package.json", drives: "Stay on these platforms until a tier's numbers exceed them. Leaving one is a decision for the owner." }
+  ],
+  zones: [
+    { id: "client", label: "Client" },
+    { id: "edge", label: "Edge" },
+    { id: "app", label: "Application" },
+    { id: "data", label: "Data" },
+    { id: "services", label: "Platform services" }
+  ],
+  load: {
+    note: "Per user per day: 200 reads, 20 writes, 8-hour active window per region, peak factor 3, 30% online at peak with one socket each.",
+    rows: ["Peak reads / writes per second", "Concurrent sockets", "Contacts", "Activity rows", "Home regions", "Availability target"],
+    values: {
+      x1: ["20 / 2", "300", "200k", "4M", "1", "99.5%"],
+      x10: ["210 / 21", "3k", "2M", "40M", "2", "99.9%"],
+      x100: ["2.1k / 210", "30k", "20M", "400M", "3", "99.9%"],
+      x1000: ["21k / 2.1k", "300k", "200M", "4B", "3", "99.95%"],
+      x10000: ["210k / 21k", "3M", "2B", "40B", "5", "99.99%"]
+    }
+  },
+  tiers: [
+    {
+      id: "x1", label: "1x", short: "1k DAU", title: "1k DAU: one region, managed everything",
+      summary: "Server-rendered pages and RLS-guarded RPCs on one Supabase project. Presence and live board moves already need two-way sockets, so Supabase Realtime is in from day one.",
+      nodes: [
+        { id: "browser", label: "Browser", tech: "RSC pages, live board channel", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R1", "R2", "R5", "R6"],
+          alternatives: [{what: "Native mobile app", why: "The brief needs a working mobile web view, not an app store release."}, {what: "Client-rendered SPA", why: "Server components keep the /contacts JS budget under 220 kB."}],
+          role: "Renders server components, keeps filters and sort in the URL, joins the board's channel for moves and presence.",
+          specifics: ["Optimistic board moves, rolled back with a retry toast", "Resync columns from an updated_at cursor on reconnect", "JS budget under 220 kB on /contacts"],
+          tradeoffs: ["One socket per open tab"], failures: [{ mode: "Socket drops", mitigation: "Backoff reconnect, quiet reconnecting state, then refetch" }],
+          breaks: "Nothing at 300 sockets.", trigger: "", cost: "Free" },
+        { id: "edge", label: "Vercel edge + proxy", tech: "proxy.ts, CSP nonce, session refresh", icon: "globe", zone: "edge", row: 0, status: "same", serves: ["R3", "R5"],
+          alternatives: "No direct alternative: Vercel's proxy is part of the hosting platform already in use.",
+          role: "Refreshes the session cookie, sets a per-request CSP nonce, redirects signed-out users.",
+          specifics: ["Static assets cached at the edge"], tradeoffs: ["Dynamic pages are never cached"],
+          failures: [{ mode: "Proxy throws", mitigation: "Fails closed to sign-in" }], breaks: "", trigger: "", cost: "Pro plan" },
+        { id: "app", label: "Server pages & actions", tech: "Vercel Functions in iad1, Zod at boundaries", icon: "lambda", zone: "app", row: 0, status: "same", serves: ["R1", "R2", "R3", "R4"],
+          alternatives: [{what: "Separate API service (Node or Go)", why: "Adds a deploy and a network hop with no requirement that needs it."}, {what: "Supabase Edge Functions", why: "Splits logic across two runtimes while the app already runs on Vercel."}],
+          role: "Reads through lib/data, writes through server actions that call RPCs, then broadcasts the change to the board channel.",
+          specifics: ["requirePermission() before every action", "Offset pages 25 to 500, default 250"],
+          tradeoffs: ["Each invocation opens its own connection"], failures: [{ mode: "RPC returns an unexpected shape", mitigation: "Zod rejects it, error boundary offers retry" }],
+          breaks: "Direct connections pile up with concurrency.", trigger: "Connections above 60% of the limit", cost: "Included" },
+        { id: "db", label: "Supabase Postgres + RLS", tech: "RPCs, urgency sort in SQL, small compute", icon: "database", zone: "data", row: 0, status: "same", serves: ["R1", "R2", "R3", "R4"],
+          alternatives: [{what: "Firebase / Firestore", why: "Weak fit for urgency sort, filters and transactional status moves."}, {what: "PlanetScale (MySQL)", why: "No RLS, so roles would be enforced only in app code."}],
+          role: "Single source of truth. RLS enforces roles, an RPC makes a status move and its activity row one transaction.",
+          specifics: ["Anon has no table access"], tradeoffs: ["One region, so far users pay the latency"],
+          failures: [{ mode: "Instance restart", mitigation: "Platform restart, idempotent writes retry" }],
+          breaks: "ILIKE search and deep offsets slow past about 1M contacts.", trigger: "List p95 above 300 ms", cost: "~$25/mo est." },
+        { id: "auth", label: "Supabase Auth", tech: "email + password, admin-created accounts", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
+          alternatives: [{what: "Clerk or Auth0", why: "A second vendor, and RLS would need custom JWT mapping."}],
+          role: "Issues sessions. Roles live in a profiles table that RLS reads.", specifics: ["Public sign-up off"], tradeoffs: [],
+          failures: [{ mode: "Auth outage", mitigation: "Existing sessions work until expiry" }], breaks: "", trigger: "", cost: "Included" },
+        { id: "rt", label: "Supabase Realtime", tech: "private board channel, Broadcast + Presence", icon: "broadcast", zone: "services", row: 1, status: "same", serves: ["R2", "R6"],
+          alternatives: [{what: "Polling every few seconds", why: "Can't meet sub-second moves or presence."}, {what: "Pusher or Ably", why: "Another vendor, and channel auth would bypass the existing RLS."}],
+          role: "Carries board moves and who-is-here presence over one socket per tab.",
+          specifics: ["Private channels authorized by RLS on realtime.messages", "Server broadcasts one message per move, events are hints"],
+          tradeoffs: ["Plan quotas on sockets and messages"], failures: [{ mode: "Realtime unavailable", mitigation: "Board falls back to 15 s polling" }],
+          breaks: "Message rate from presence grows with sockets x boards.", trigger: "Messages above 70% of plan quota", cost: "Included" }
+      ],
+      edges: [
+        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "app" }, { from: "app", to: "db", label: "RPC + RLS" },
+        { from: "app", to: "auth", label: "session" }, { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
+      ],
+      moves: [{ what: "Baseline", why: "The smallest system that meets R1 to R6 in one region.", driver: "Presence and sub-second moves need sockets even at 1k DAU", trigger: "n/a" }],
+      rejected: [
+        { what: "Own websocket server", why: "300 sockets. Managed Realtime with RLS-authorized private channels covers presence." },
+        { what: "postgres_changes for the board", why: "Checks every change against every subscriber. One broadcast per move is cheaper." },
+        { what: "Redis or a job queue", why: "200k contacts are fast with indexes, and the brief has no side effects." },
+        { what: "The repo's keep-alive cron", why: "Exists only so the free tier doesn't pause. Paid compute doesn't." }
+      ]
+    },
+    {
+      id: "x10", label: "10x", short: "10k DAU", title: "10k DAU: a second home for residency",
+      summary: "Load is still small, but going global makes R7 bite: EU client data can't sit in a US database. A second Supabase project becomes the EU home, and a directory at the edge routes each user to their home.",
+      nodes: [
+        { id: "browser", label: "Browser", tech: "unchanged", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R2", "R6"],
+          role: "Unchanged. Connects to its home region's Realtime.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "edge", label: "Vercel edge + router", tech: "routes each request to its home region", icon: "globe", zone: "edge", row: 0, status: "changed", serves: ["R5", "R7"],
+          role: "Looks up the signed-in user's home region and sends the request to functions in that region.",
+          specifics: ["Unknown users go to sign-in, never to a default region"], tradeoffs: ["One more lookup per request, cached at the edge"],
+          failures: [{ mode: "Directory miss", mitigation: "Fail closed with an error state, never guess a region" }], breaks: "", trigger: "", cost: "" },
+        { id: "dir", label: "Region directory", tech: "Vercel Edge Config: user to home", icon: "lock", zone: "edge", row: 1, status: "new", serves: ["R7"],
+          alternatives: [{what: "Global lookup table in the US database", why: "Puts EU users' identity data in the US, breaking R7."}, {what: "Region in the subdomain (eu.app...)", why: "Users must know their region, and links break when an office moves."}],
+          role: "Maps each user and office to the home region that holds their data.",
+          specifics: ["Written only when an admin creates a user or moves an office"], tradeoffs: ["Edge Config writes are slow, fine for rare changes"],
+          failures: [{ mode: "Stale entry after an office move", mitigation: "Move runs as a planned migration with a read-only window" }],
+          breaks: "", trigger: "", cost: "Included" },
+        { id: "app", label: "Regional functions", tech: "iad1 and fra1, each talks to its home", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R1", "R4", "R5", "R7"],
+          role: "Runs next to each home database. Global admin views fan out to both homes and merge one page.",
+          specifics: ["Keyset pagination for board columns, 50 per request"], tradeoffs: ["Cross-home views cost two queries"],
+          failures: [{ mode: "One home slow", mitigation: "Global view shows the other home with a partial-results banner" }], breaks: "", trigger: "", cost: "" },
+        { id: "cache", label: "Next data cache", tech: "facet counts, tagged per role", icon: "zap", zone: "app", row: 1, status: "new", serves: ["R1"],
+          alternatives: [{what: "Redis", why: "A new service when the framework cache already handles tagged invalidation."}],
+          role: "Caches status counts per role and home, invalidated by tag on every contact write.",
+          specifics: ["Never shared across roles"], tradeoffs: ["Stale if a write path forgets to revalidate"],
+          failures: [{ mode: "Missed revalidation", mitigation: "Short TTL backstop" }], breaks: "", trigger: "Hit rate under 50%", cost: "Included" },
+        { id: "pool", label: "Supavisor pooler", tech: "transaction mode, one per home", icon: "funnel", zone: "data", row: 0, status: "new", serves: ["R5"],
+          alternatives: [{what: "PgBouncer self-hosted", why: "Supavisor is built in, nothing to run."}, {what: "Direct connections", why: "Serverless concurrency would exhaust the connection limit."}],
+          role: "Pools serverless connections in front of each home database.", specifics: ["No session SET or prepared statements"],
+          tradeoffs: ["Transaction mode breaks session features"], failures: [{ mode: "Pool exhausted", mitigation: "5 s statement timeout" }], breaks: "", trigger: "", cost: "Included" },
+        { id: "db", label: "Postgres US home", tech: "pg_trgm and keyset indexes, medium compute", icon: "database", zone: "data", row: 1, status: "changed", serves: ["R1", "R2", "R4"],
+          role: "Holds US and rest-of-world data. Adds trigram search and indexes matching each sort.",
+          specifics: ["Index (status, updated_at desc, id)"], tradeoffs: ["Indexes slow writes slightly"],
+          failures: [{ mode: "Seq scan on a new filter", mitigation: "Slow-query review each release" }],
+          breaks: "Reads dominate CPU as APAC offices join.", trigger: "Primary CPU above 70%, reads over 80%", cost: "~$60/mo est." },
+        { id: "dbeu", label: "Postgres EU home", tech: "separate Supabase project, eu-central-1", icon: "database", zone: "data", row: 2, status: "new", serves: ["R7"],
+          alternatives: [{what: "EU read replica of the US primary", why: "Copies EU data into the US primary, breaking R7."}, {what: "Row-level region column in one database", why: "The data still physically sits in one jurisdiction."}],
+          role: "Holds EU offices' client data. Same schema and migrations as the US home.",
+          specifics: ["Migrations run against every home in CI"], tradeoffs: ["Two projects to migrate, monitor and back up"],
+          failures: [{ mode: "Migration applied to one home only", mitigation: "CI fails unless every home reports the same version" }], breaks: "", trigger: "", cost: "~$60/mo est." },
+        { id: "auth", label: "Supabase Auth per home", tech: "user lives in its home project", icon: "key", zone: "services", row: 0, status: "changed", serves: ["R3", "R7"],
+          role: "Each user's account sits in their home project, so personal data also stays in region.", specifics: [], tradeoffs: ["Moving a user between homes is a migration"],
+          failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "rt", label: "Realtime per home", tech: "board channels stay in their region", icon: "broadcast", zone: "services", row: 1, status: "changed", serves: ["R6", "R7"],
+          role: "Each home's Realtime carries its own boards, so messages never cross a border.", specifics: [], tradeoffs: ["Cross-region boards are out of scope, a decision for the owner"],
+          failures: [{ mode: "Realtime unavailable", mitigation: "15 s polling fallback" }], breaks: "", trigger: "", cost: "" }
+      ],
+      edges: [
+        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
+        { from: "app", to: "pool", label: "SQL" }, { from: "pool", to: "db" }, { from: "pool", to: "dbeu", label: "EU" },
+        { from: "app", to: "cache", label: "facets" }, { from: "app", to: "auth", label: "session" },
+        { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
+      ],
+      moves: [
+        { what: "EU home project and a region directory", why: "EU client data can't live in the US database.", driver: "R7 residency, user confirmed global from 10k", trigger: "First EU office onboarded" },
+        { what: "Supavisor pooler", why: "Two regions of serverless functions multiply connections.", driver: "Serverless compute", trigger: "Connections above 60% of the limit" },
+        { what: "Trigram and keyset indexes", why: "2M contacts slow ILIKE search and deep offsets.", driver: "Read-heavy list and board", trigger: "List p95 above 300 ms" },
+        { what: "Facet cache by tag", why: "Every list view recounts statuses.", driver: "Read-heavy, 10:1", trigger: "Facet query in the top three by total time" }
+      ],
+      rejected: [
+        { what: "One US primary with an EU read replica", why: "Copies EU client data into the US. Breaks R7." },
+        { what: "Multi-region writes", why: "21 writes per second fit each home easily." },
+        { what: "Redis", why: "The framework cache covers facets, nothing else is hot yet." },
+        { what: "Self-run websocket gateway", why: "3k sockets are well inside managed Realtime." }
+      ]
+    },
+    {
+      id: "x100", label: "100x", short: "100k DAU", title: "100k DAU: replicas in region, presence under control",
+      summary: "A third home for APAC, read replicas inside each jurisdiction, partitioned activity, and Redis for shared counts and limits. Presence traffic becomes the realtime cost to manage.",
+      nodes: [
+        { id: "browser", label: "Browser", tech: "presence throttled to 1 update per 2 s", icon: "browser", zone: "client", row: 0, status: "changed", serves: ["R6"],
+          role: "Sends presence on focus change only, batched, and applies incoming moves per animation frame.", specifics: [], tradeoffs: ["Presence can lag up to 2 s, moves stay instant"],
+          failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "edge", label: "Vercel WAF + router", tech: "rate limits, bot rules, region routing", icon: "shield", zone: "edge", row: 0, status: "changed", serves: ["R3", "R5", "R7"],
+          role: "Adds firewall rules and per-user limits in front of the region router.", specifics: ["Stricter limits on sign-in"], tradeoffs: ["False positives need an allow list"],
+          failures: [{ mode: "Script bursts", mitigation: "429 with Retry-After" }], breaks: "", trigger: "", cost: "" },
+        { id: "dir", label: "Region directory", tech: "now US, EU and APAC", icon: "lock", zone: "edge", row: 1, status: "same", serves: ["R7"],
+          role: "Unchanged, one more region.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "app", label: "Regional functions", tech: "3 regions, replica reads, realtime breaker", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R1", "R2", "R5"],
+          role: "Sends list and board reads to the home's replica, except reads within 5 s of the user's own write.",
+          specifics: ["Circuit breaker on Realtime, opens to 15 s polling", "Bulkhead: search gets its own pool"], tradeoffs: ["Routing logic to test"],
+          failures: [{ mode: "Replica lag spike", mitigation: "All reads to the primary while lag exceeds 2 s" }], breaks: "", trigger: "", cost: "" },
+        { id: "redis", label: "Upstash Redis per region", tech: "facet counts, rate-limit buckets", icon: "zap", zone: "app", row: 1, status: "new", serves: ["R1", "R5"],
+          alternatives: [{what: "Keep the framework cache", why: "Per-instance caches stop agreeing at this instance count."}, {what: "Memcached (ElastiCache)", why: "No rate-limit primitives, and leaves the managed serverless model."}],
+          role: "Shared cache and token buckets across every function instance in the region.",
+          specifics: ["Request coalescing and TTL jitter on hot keys", "Regional, so cached data stays in jurisdiction"], tradeoffs: ["One more service per region"],
+          failures: [{ mode: "Redis down", mitigation: "Breaker skips the cache, reads the replica" }], breaks: "", trigger: "", cost: "~$30 to $100/mo est." },
+        { id: "cache", label: "Next data cache", tech: "replaced by Redis", icon: "zap", zone: "app", row: 2, status: "removed", serves: ["R1"],
+          role: "Removed. Per-instance caches stop agreeing at this instance count.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "pool", label: "Supavisor pooler", tech: "unchanged", icon: "funnel", zone: "data", row: 0, status: "same", serves: ["R5"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "db", label: "Postgres homes x3", tech: "US, EU, APAC, activity partitioned by month", icon: "database", zone: "data", row: 1, status: "changed", serves: ["R4", "R7"],
+          role: "Each home takes its writes and post-write reads. The activity table, the fastest-growing, is partitioned by month.",
+          specifics: ["Larger compute in the busiest home"], tradeoffs: ["Partition maintenance"],
+          failures: [{ mode: "Primary failover", mitigation: "Platform failover, writes retry with idempotency keys" }],
+          breaks: "Search on 20M contacts starts to strain replicas.", trigger: "Search p95 above 300 ms", cost: "~$400/mo est." },
+        { id: "replica", label: "Read replicas in region", tech: "one per home, same jurisdiction", icon: "layers", zone: "data", row: 2, status: "new", serves: ["R1", "R2", "R7"],
+          alternatives: [{what: "Bigger primary only", why: "Vertical headroom runs out, and failover still has a single box."}, {what: "Cross-region replicas", why: "Would move data out of its jurisdiction."}],
+          role: "Serve list, board and detail reads without leaving the home's jurisdiction.", specifics: ["Lag alert above 2 s"], tradeoffs: ["Stale reads right after a write"],
+          failures: [{ mode: "Replica down", mitigation: "Reads fall back to the primary" }], breaks: "", trigger: "", cost: "~$300/mo est." },
+        { id: "auth", label: "Supabase Auth per home", tech: "unchanged", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "rt", label: "Realtime per home", tech: "30k sockets, presence batched", icon: "broadcast", zone: "services", row: 1, status: "changed", serves: ["R6"],
+          role: "Same channels with throttled presence, so message volume grows with users, not users squared.", specifics: [], tradeoffs: ["Plan upgrade for socket quotas"],
+          failures: [{ mode: "Quota hit at peak", mitigation: "Breaker opens to polling, alert at 70%" }], breaks: "Sockets near managed limits at 300k.", trigger: "Sockets above 70% of plan quota", cost: "Usage based" }
+      ],
+      edges: [
+        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
+        { from: "app", to: "pool", label: "writes" }, { from: "pool", to: "db" }, { from: "app", to: "replica", label: "reads" },
+        { from: "db", to: "replica", label: "replicate", async: true }, { from: "app", to: "redis", label: "cache" },
+        { from: "app", to: "auth", label: "session" }, { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
+      ],
+      moves: [
+        { what: "APAC home", why: "APAC offices' data must stay in APAC.", driver: "R7 residency", trigger: "First APAC office onboarded" },
+        { what: "Read replicas inside each jurisdiction", why: "About 1k reads per second in the busiest home.", driver: "Read-heavy, 10:1", trigger: "Primary CPU above 70%, reads over 80%" },
+        { what: "Partition activity by month", why: "400M timeline rows slow vacuum and deletes.", driver: "Data growth on R4", trigger: "Activity above about 200M rows" },
+        { what: "Throttle and batch presence", why: "Presence messages grow fastest with 30k sockets.", driver: "Two-way connection model", trigger: "Messages above 70% of quota" },
+        { what: "Redis, WAF and breakers", why: "Shared counts and limits across instances, and containment when one dependency fails.", driver: "Many instances per region", trigger: "First incident caused by one dependency" }
+      ],
+      rejected: [
+        { what: "Sharding", why: "About 100 writes per second per home fit one primary." },
+        { what: "Cross-region replicas for latency", why: "Would copy client data across borders. Breaks R7." },
+        { what: "Search engine", why: "pg_trgm on the replicas still meets R1 at 20M contacts." },
+        { what: "Kafka", why: "Realtime is the only consumer of changes." }
+      ]
+    },
+    {
+      id: "x1000", label: "1000x", short: "1M DAU", title: "1M DAU: search engine, outbox, dedicated realtime",
+      summary: "Search moves to its own engine fed by an outbox, each home gets more replicas and a disaster-recovery standby, and 300k sockets need a dedicated realtime cluster.",
+      nodes: [
+        { id: "browser", label: "Browser", tech: "unchanged", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R6"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "edge", label: "Vercel WAF + router", tech: "unchanged", icon: "shield", zone: "edge", row: 0, status: "same", serves: ["R5"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "dir", label: "Region directory", tech: "unchanged", icon: "lock", zone: "edge", row: 1, status: "same", serves: ["R7"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "app", label: "Regional functions", tech: "autoscaled, bulkheads per path", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R1", "R5"],
+          role: "Separate concurrency limits for list, board, search and writes, so one slow path can't starve the rest.", specifics: ["Search queries go to the engine, not Postgres"],
+          tradeoffs: [], failures: [{ mode: "Search engine down", mitigation: "Fall back to prefix search on replicas with a notice" }], breaks: "", trigger: "", cost: "" },
+        { id: "redis", label: "Redis cluster per region", tech: "hot-key coalescing, rate limits", icon: "zap", zone: "app", row: 1, status: "changed", serves: ["R1", "R5"],
+          role: "Larger, clustered, with stampede protection on facet keys of the biggest offices.", specifics: [], tradeoffs: [],
+          failures: [{ mode: "Hot key on a big office", mitigation: "Coalesce and serve stale for 5 s" }], breaks: "", trigger: "", cost: "~$500/mo est." },
+        { id: "worker", label: "Outbox queue + workers", tech: "Supabase Queues (pgmq) and consumers", icon: "queue", zone: "data", row: 3, status: "new", serves: ["R1"],
+          alternatives: [{what: "Kafka or SQS", why: "Only one consumer (search), and pgmq keeps the outbox in the same transaction."}, {what: "Database triggers calling search directly", why: "Couples writes to search uptime."}],
+          role: "Read the outbox and update the search index. At-least-once, idempotent by contact id and version.",
+          specifics: ["Dead-letter queue with an alert"], tradeoffs: ["Search lags writes by about a second"],
+          failures: [{ mode: "Worker backlog", mitigation: "Autoscale on queue depth, alert at 1 min lag" }], breaks: "", trigger: "", cost: "" },
+        { id: "pool", label: "Supavisor pooler", tech: "unchanged", icon: "funnel", zone: "data", row: 0, status: "same", serves: ["R5"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "db", label: "Postgres homes x3", tech: "large compute, outbox table, DR standby", icon: "database", zone: "data", row: 1, status: "changed", serves: ["R4", "R5"],
+          role: "Writes the outbox row in the same transaction as the change. Each home has a standby in a second zone.",
+          specifics: ["Recovery time under 15 min, data loss under 1 min, stated in the runbook"], tradeoffs: ["Standby doubles database cost"],
+          failures: [{ mode: "Zone outage", mitigation: "Promote the standby" }],
+          breaks: "About 1k writes per second in the busiest home nears one primary's comfort zone.", trigger: "Write CPU above 60% at peak", cost: "~$3k/mo est." },
+        { id: "replica", label: "Read replicas in region", tech: "three per home", icon: "layers", zone: "data", row: 2, status: "changed", serves: ["R1", "R2"],
+          role: "More replicas for about 10k reads per second in the busiest home.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "~$2k/mo est." },
+        { id: "auth", label: "Supabase Auth per home", tech: "unchanged", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "rt", label: "Realtime, dedicated", tech: "300k sockets, dedicated cluster per home", icon: "broadcast", zone: "services", row: 1, status: "changed", serves: ["R6"],
+          role: "Moves to dedicated capacity so socket and message limits are contractual.", specifics: ["Needs a sales conversation with Supabase, a decision for the owner"],
+          tradeoffs: ["Enterprise pricing"], failures: [{ mode: "Cluster degraded", mitigation: "Breaker to polling" }], breaks: "3M sockets exceed a managed cluster per home.", trigger: "Sockets above 70% of contract", cost: "Contract" },
+        { id: "search", label: "Typesense per region", tech: "contacts index fed by the outbox", icon: "search", zone: "services", row: 2, status: "new", serves: ["R1", "R7"],
+          alternatives: [{what: "Elasticsearch / OpenSearch", why: "Heavier to run for name, email and phone search."}, {what: "Keep pg_trgm on replicas", why: "Misses the 300 ms budget at 200M contacts."}],
+          role: "Typo-tolerant search over 200M contacts, one cluster per home, so the index stays in jurisdiction.", specifics: ["Index holds only searchable fields"],
+          tradeoffs: ["A second copy of data to keep consistent"], failures: [{ mode: "Index drift", mitigation: "Nightly reconciliation against Postgres" }], breaks: "", trigger: "", cost: "~$1k/mo est." }
+      ],
+      edges: [
+        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
+        { from: "app", to: "pool", label: "writes" }, { from: "pool", to: "db" }, { from: "app", to: "replica", label: "reads" },
+        { from: "db", to: "replica", label: "replicate", async: true }, { from: "app", to: "redis", label: "cache" },
+        { from: "db", to: "worker", label: "outbox", async: true }, { from: "worker", to: "search", label: "index", async: true },
+        { from: "app", to: "search", label: "search" }, { from: "app", to: "auth", label: "session" },
+        { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
+      ],
+      moves: [
+        { what: "Search engine fed by an outbox", why: "Trigram search over 200M contacts misses the budget.", driver: "Data growth on R1", trigger: "Search p95 above 300 ms on replicas" },
+        { what: "Dedicated realtime capacity", why: "300k sockets pass shared-plan limits.", driver: "Two-way connection model", trigger: "Sockets above 70% of quota" },
+        { what: "Standby per home", why: "99.95% can't survive a zone outage without one.", driver: "Availability target", trigger: "Target raised to 99.95%" },
+        { what: "Bulkheads and more replicas", why: "10k reads per second in the busiest home.", driver: "Read-heavy, Monday peaks 3x", trigger: "Replica CPU above 70% at peak" }
+      ],
+      rejected: [
+        { what: "Sharding", why: "The busiest home's ~1k writes per second still fit a large primary." },
+        { what: "Kafka", why: "Search is the only consumer, the pgmq outbox covers it." },
+        { what: "Self-run websocket fleet", why: "Dedicated managed capacity avoids running stateful sockets." },
+        { what: "Active-active writes", why: "Each record has one home, so no write conflicts exist to solve." }
+      ]
+    },
+    {
+      id: "x10000", label: "10000x", short: "10M DAU", title: "10M DAU: geo-partitioned SQL, an event stream, a socket fleet",
+      summary: "21k writes per second and five jurisdictions outgrow one Postgres primary per home. The data tier becomes a geo-partitioned distributed SQL database, changes flow through an event stream to every consumer, and sockets move to a gateway fleet.",
+      nodes: [
+        { id: "browser", label: "Browser", tech: "unchanged", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R6"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "edge", label: "Vercel WAF + router", tech: "five regions", icon: "shield", zone: "edge", row: 0, status: "same", serves: ["R5"],
+          role: "Unchanged, more regions.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "dir", label: "Region directory", tech: "user and office to home", icon: "lock", zone: "edge", row: 1, status: "same", serves: ["R7"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "app", label: "Regional cells", tech: "full stack per region, no cross-cell calls", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R5", "R7"],
+          role: "Each region runs as an independent cell, so an outage stays inside one region.", specifics: [], tradeoffs: ["Global views go through the warehouse, not live queries"],
+          failures: [{ mode: "Cell outage", mitigation: "Only that region degrades" }], breaks: "", trigger: "", cost: "" },
+        { id: "redis", label: "Redis cluster per region", tech: "unchanged", icon: "zap", zone: "app", row: 1, status: "same", serves: ["R1"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "worker", label: "Stream consumers", tech: "archive and reconciliation jobs", icon: "worker", zone: "app", row: 2, status: "changed", serves: ["R4"],
+          role: "Consume the event stream to archive old activity and reconcile the search index.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "dsql", label: "Distributed SQL", tech: "YugabyteDB, geo-partitioned by home", icon: "database", zone: "data", row: 0, status: "new", serves: ["R1", "R2", "R4", "R7"],
+          alternatives: [{what: "Hand-sharded Postgres (Citus)", why: "No built-in geo-pinning per row for residency."}, {what: "CockroachDB", why: "Also fits. Licence and cost terms tip it toward YugabyteDB, a decision for the owner."}],
+          role: "One logical Postgres-compatible database, with each row pinned to its home region's nodes and writes spread across them.",
+          specifics: ["Partition key: home region, then office", "Follower reads replace replicas"],
+          tradeoffs: ["One-way door: leaving Supabase's data tier needs an ADR", "Some Postgres features and extensions differ"],
+          failures: [{ mode: "Node loss", mitigation: "Raft replication inside the region" }], breaks: "", trigger: "", cost: "~$40k/mo est." },
+        { id: "stream", label: "Event stream", tech: "Kafka (MSK) fed by CDC", icon: "queue", zone: "data", row: 1, status: "new", serves: ["R1", "R6"],
+          alternatives: [{what: "Keep pgmq outboxes", why: "Four consumers need ordered replay, which a queue doesn't give."}, {what: "Kinesis", why: "Fits too. Kafka (MSK) has the wider connector ecosystem for CDC and warehouse sinks."}],
+          role: "Every change flows once to search, realtime, the warehouse and the archive.", specifics: ["Topic per region, partitioned by contact id"],
+          tradeoffs: ["Real operations cost"], failures: [{ mode: "Consumer lag", mitigation: "Per-consumer lag alerts, replay from offset" }], breaks: "", trigger: "", cost: "~$5k/mo est." },
+        { id: "archive", label: "Cold archive", tech: "activity over 2 years, Parquet on S3", icon: "storage", zone: "data", row: 2, status: "new", serves: ["R4", "R7"],
+          alternatives: [{what: "Keep all activity hot", why: "40B rows make hot storage and vacuum the main cost."}],
+          role: "Old timeline rows leave the hot database. The timeline loads them on demand.", specifics: ["Bucket per region"], tradeoffs: ["Old activity loads slower"],
+          failures: [], breaks: "", trigger: "", cost: "~$1k/mo est." },
+        { id: "pg", label: "Postgres homes + replicas", tech: "migrated to distributed SQL", icon: "database", zone: "data", row: 3, status: "removed", serves: ["R4"],
+          alternatives: "Replaced by distributed SQL. See that component for the alternatives.",
+          role: "Removed after a staged migration (dual writes, backfill, switch reads, then cut over).", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "auth", label: "Supabase Auth per home", tech: "unchanged, or SSO, a decision", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
+          role: "Can stay on Supabase even after the data tier moves.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "rt", label: "Socket gateway fleet", tech: "Ably, or self-run on NATS, a decision", icon: "gateway", zone: "services", row: 1, status: "changed", serves: ["R6"],
+          alternatives: [{what: "Stay on dedicated Supabase Realtime", why: "3M sockets exceed a managed cluster per home."}, {what: "Self-run gateway on NATS", why: "Cheaper at scale but needs on-call for stateful sockets."}],
+          role: "Holds 3M sockets with a backplane so any node reaches any board's subscribers.",
+          specifics: ["Presence with heartbeats and expiry", "Resync from a cursor on reconnect"], tradeoffs: ["Managed costs more, self-run needs on-call"],
+          failures: [{ mode: "Gateway node loss", mitigation: "Clients reconnect to another node and resync" }], breaks: "", trigger: "", cost: "~$20k/mo est." },
+        { id: "search", label: "Typesense per region", tech: "fed by the stream", icon: "search", zone: "services", row: 2, status: "changed", serves: ["R1"],
+          role: "Now indexes from the stream instead of an outbox.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "~$8k/mo est." },
+        { id: "wh", label: "Warehouse", tech: "BigQuery, regional datasets", icon: "chart", zone: "services", row: 3, status: "new", serves: ["R1", "R7"],
+          alternatives: [{what: "Snowflake", why: "Fits too. BigQuery's regional datasets match the residency model with less setup."}, {what: "Query the transactional nodes", why: "Reporting load would compete with R5's latency budget."}],
+          role: "Global reporting and cross-region views, off the transactional path.", specifics: ["Aggregates only cross borders, raw rows stay regional"],
+          tradeoffs: ["Minutes behind live data"], failures: [], breaks: "", trigger: "", cost: "~$3k/mo est." }
+      ],
+      edges: [
+        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
+        { from: "app", to: "dsql", label: "SQL" }, { from: "app", to: "redis", label: "cache" },
+        { from: "dsql", to: "stream", label: "CDC", async: true }, { from: "stream", to: "worker", label: "events", async: true },
+        { from: "worker", to: "archive", label: "archive", async: true },
+        { from: "stream", to: "search", label: "index", async: true }, { from: "stream", to: "rt", label: "fan-out", async: true },
+        { from: "stream", to: "wh", label: "sink", async: true }, { from: "app", to: "search", label: "search" },
+        { from: "app", to: "auth", label: "session" }, { from: "rt", to: "browser", label: "WS", async: true }
+      ],
+      moves: [
+        { what: "Geo-partitioned distributed SQL", why: "21k writes per second and five jurisdictions outgrow one primary per home.", driver: "Write volume and R7 residency together", trigger: "Busiest home's write CPU above 60% after partitioning" },
+        { what: "Event stream with CDC", why: "Four consumers now need every change, in order, with replay.", driver: "Search, realtime, warehouse and archive", trigger: "A third consumer of changes" },
+        { what: "Socket gateway fleet", why: "3M sockets with presence.", driver: "Two-way connection model", trigger: "Managed cluster above 70% of contract" },
+        { what: "Cold archive and a warehouse", why: "40B activity rows and global reporting.", driver: "Data growth on R4, single-org global views", trigger: "Hot storage cost or reporting load on transactional nodes" }
+      ],
+      rejected: [
+        { what: "Hand-rolled Postgres sharding", why: "Distributed SQL gives geo-partitioning and rebalancing, hand sharding rebuilds both." },
+        { what: "Multi-master Postgres", why: "Conflicting status moves on R2 are a correctness risk with no upside, since each record has one home." },
+        { what: "Microservices split", why: "One product and one team. Cells give isolation without service sprawl." }
+      ]
+    }
+  ]
+};</script>
+<script>
+(function () {
+  const ICONS = {
+    browser: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r=".6"/><circle cx="9" cy="6.5" r=".6"/>',
+    mobile: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
+    shield: '<path d="M12 3l7.5 3v6c0 4.6-3.1 7.7-7.5 9.2C7.6 19.7 4.5 16.6 4.5 12V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+    balancer: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v9.6M12 11l-6.2 6M12 11l6.2 6"/>',
+    lambda: '<path d="M6 4h3.5L18 20"/><path d="M12.3 10.5L7 20"/>',
+    server: '<rect x="4" y="3.5" width="16" height="7" rx="1.8"/><rect x="4" y="13.5" width="16" height="7" rx="1.8"/><path d="M8 7h.01M8 17h.01M12 7h4M12 17h4"/>',
+    worker: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+    database: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13"/><path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 5 9-5" opacity=".55"/>',
+    funnel: '<path d="M3.5 4.5h17l-6.5 8v6l-4 2v-8z"/>',
+    zap: '<path d="M13.5 2.5L4.5 14h7l-1 7.5 9-11.5h-7z"/>',
+    queue: '<rect x="3" y="4.5" width="18" height="4" rx="1.2"/><rect x="3" y="10.5" width="18" height="4" rx="1.2"/><rect x="3" y="16.5" width="11" height="4" rx="1.2"/>',
+    broadcast: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+    gateway: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+    key: '<circle cx="8" cy="15.5" r="4.2"/><path d="M11 12.5l9-9M16.5 7l3 3"/>',
+    storage: '<path d="M3 7.5l9-4.5 9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2.2"/><path d="M3.5 6.5l8.5 6 8.5-6"/>',
+    cloud: '<path d="M7 18.5h10.5a4 4 0 0 0 .6-8A6.2 6.2 0 0 0 6.2 9.6 4.5 4.5 0 0 0 7 18.5z"/>',
+    chart: '<path d="M4 20V11M10 20V5M16 20v-7M21.5 20h-19"/>',
+    breaker: '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="16" cy="12" r="2.3"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'
+  };
+  const svgIcon = (k, cls) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (cls ? ' class="' + cls + '"' : '') + '>' + (ICONS[k] || ICONS.cloud) + '</svg>';
+  const CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  const NW = 216, NH = 112, CW = 300, RH = 136, TOP = 58, PADX = 20, PADB = 24, CH = 20, GAP = CW - NW;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const zoneIdx = Object.fromEntries(DESIGN.zones.map((z, i) => [z.id, i]));
+  const reqText = Object.fromEntries(DESIGN.requirements.map((r) => [r.id, r.text]));
+  let tier = DESIGN.tiers[0], opener = null;
+
+  $("title").textContent = DESIGN.title;
+  $("stack").textContent = DESIGN.stack;
+  $("problem").textContent = DESIGN.problem;
+  $("reqs").innerHTML = DESIGN.requirements.map((r) => '<span class="req"><b>' + esc(r.id) + '</b>' + esc(r.text) + '</span>').join("");
+
+  const SRC = (s) => (String(s).toLowerCase().match(/^(repo|brief|user|inferred|unknown)/) || [, "unknown"])[1];
+  $("profile").innerHTML = (DESIGN.profile || []).map((p) => '<div class="prof"><span class="eyebrow">' + esc(p.label) + '</span><span class="v">' + esc(p.value) + '</span><span class="d">' + esc(p.drives) + '</span><span class="src ' + SRC(p.source) + '">' + esc(p.source) + '</span></div>').join("");
+
+  DESIGN.tiers.forEach((t) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.setAttribute("role", "tab"); b.id = "tab-" + t.id;
+    b.innerHTML = '<span class="t">' + esc(t.label) + '</span><span class="l">' + esc(t.short) + '</span>';
+    b.addEventListener("click", () => { location.hash = t.id; });
+    $("tabs").appendChild(b);
+  });
+
+  $("legend").innerHTML =
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="1.6" stroke-dasharray="7 5"/></svg>Request path</span>' +
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="2.2" stroke-dasharray="2 6" stroke-linecap="round"/></svg>Async or push</span>' +
+    '<span><b style="color:var(--new)">NEW</b> added at this tier</span><span><b style="color:var(--changed)">CHANGED</b> reconfigured</span><span><b style="color:var(--removed)">REMOVED</b> no longer needed</span>';
+
+  $("only").addEventListener("change", (e) => $("canvas").classList.toggle("only-changes", e.target.checked));
+
+  const pos = (n) => ({ x: PADX + zoneIdx[n.zone] * CW + (CW - NW) / 2, y: TOP + n.row * RH });
+
+  function bez(x1, y1, c1x, c1y, c2x, c2y, x2, y2) {
+    const t = 0.5, m = 0.5, mx = m * m * m * x1 + 3 * m * m * t * c1x + 3 * m * t * t * c2x + t * t * t * x2;
+    const my = m * m * m * y1 + 3 * m * m * t * c1y + 3 * m * t * t * c2y + t * t * t * y2;
+    return { d: "M" + x1 + "," + y1 + " C" + c1x + "," + c1y + " " + c2x + "," + c2y + " " + x2 + "," + y2, mx, my };
+  }
+  function rounded(pts, r) {
+    let d = "M" + pts[0][0] + "," + pts[0][1];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+      const r1 = Math.min(r, Math.hypot(x - px, y - py) / 2, Math.hypot(nx - x, ny - y) / 2);
+      const ax = x - Math.sign(x - px) * r1, ay = y - Math.sign(y - py) * r1;
+      const bx = x + Math.sign(nx - x) * r1, by = y + Math.sign(ny - y) * r1;
+      d += " L" + ax + "," + ay + " Q" + x + "," + y + " " + bx + "," + by;
+    }
+    const last = pts[pts.length - 1];
+    return d + " L" + last[0] + "," + last[1];
+  }
+  /* Adjacent columns get a curve, same column a vertical curve, longer spans run along a channel under the nodes. */
+  function wirePath(a, b, k, channelTop) {
+    const pa = pos(a), pb = pos(b), ca = zoneIdx[a.zone], cb = zoneIdx[b.zone];
+    if (ca === cb && Math.abs(a.row - b.row) > 1) {
+      const xr = pa.x + NW, gx = xr + 18, ya = pa.y + NH / 2, yb = pb.y + NH / 2;
+      return { d: rounded([[xr, ya], [gx, ya], [gx, yb], [xr, yb]], 10), mx: gx, my: (ya + yb) / 2, side: true, inset: true };
+    }
+    if (ca === cb) {
+      const down = pb.y > pa.y, x = pa.x + NW / 2, y1 = down ? pa.y + NH : pa.y, y2 = down ? pb.y : pb.y + NH;
+      return Object.assign(bez(x, y1, x, y1 + (down ? 20 : -20), x, y2 + (down ? -20 : 20), x, y2), { side: true });
+    }
+    const right = cb > ca, y1 = pa.y + NH / 2, y2 = pb.y + NH / 2;
+    const x1 = right ? pa.x + NW : pa.x, x2 = right ? pb.x : pb.x + NW;
+    if (Math.abs(cb - ca) === 1) {
+      const d = GAP / 2;
+      return bez(x1, y1, x1 + (right ? d : -d), y1, x2 + (right ? -d : d), y2, x2, y2);
+    }
+    const off = (k % 4) * 6 - 9;
+    const g1 = x1 + (right ? GAP / 2 : -GAP / 2) + off, g2 = x2 + (right ? -GAP / 2 : GAP / 2) - off;
+    const cy = channelTop + k * CH;
+    return { d: rounded([[x1, y1], [g1, y1], [g1, cy], [g2, cy], [g2, y2], [x2, y2]], 10), mx: (g1 + g2) / 2, my: cy };
+  }
+
+  function draw() {
+    const c = $("canvas");
+    const maxRow = Math.max(...tier.nodes.map((n) => n.row));
+    const byId0 = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    const long = tier.edges.filter((e) => byId0[e.from] && byId0[e.to] && Math.abs(zoneIdx[byId0[e.from].zone] - zoneIdx[byId0[e.to].zone]) > 1);
+    const channelTop = TOP + maxRow * RH + NH + 28;
+    const W = PADX * 2 + DESIGN.zones.length * CW, H = channelTop + Math.max(0, long.length - 1) * CH + (long.length ? 24 : 0) + PADB - (long.length ? 0 : 28);
+    c.style.width = W + "px"; c.style.height = H + "px";
+    fit(W, H);
+    let html = "";
+    DESIGN.zones.forEach((z, i) => {
+      html += '<div class="lane" style="left:' + (PADX + i * CW + 6) + 'px;width:' + (CW - 12) + 'px"></div>';
+      html += '<div class="lane-head" style="left:' + (PADX + i * CW + 18) + 'px"><i style="background:var(--z-' + z.id + '-ink)"></i>' + esc(z.label) + '</div>';
+    });
+    const byId = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    let wires = "", labels = "";
+    tier.edges.forEach((e) => {
+      const a = byId[e.from], b = byId[e.to];
+      if (!a || !b) return;
+      const w = wirePath(a, b, long.indexOf(e), channelTop);
+      const cls = 'wire ' + (e.async ? "async" : "sync");
+      wires += '<path class="' + cls + '" data-a="' + e.from + '" data-b="' + e.to + '" d="' + w.d + '" marker-end="url(#ah)"/>';
+      if (e.label) {
+        const txt = e.label.length > 14 ? e.label.slice(0, 13) + "…" : e.label;
+        const tw = txt.length * 6.4 + 14, lx = w.inset ? w.mx + 4 + tw / 2 : w.side ? w.mx + 8 + tw / 2 : w.mx;
+        labels += '<g class="wire-label" data-a="' + e.from + '" data-b="' + e.to + '"><rect x="' + (lx - tw / 2) + '" y="' + (w.my - 10) + '" width="' + tw + '" height="20" rx="10"/><text x="' + lx + '" y="' + (w.my + 3.8) + '" text-anchor="middle">' + esc(txt) + '</text><title>' + esc(e.label) + '</title></g>';
+      }
+    });
+    html += '<svg class="wires" width="' + W + '" height="' + H + '"><defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--wire)"/></marker></defs>' + wires + labels + '</svg>';
+    tier.nodes.forEach((n) => {
+      const p = pos(n);
+      const st = n.status === "same" ? "" : '<span class="st">' + n.status.toUpperCase() + '</span>';
+      html += '<button class="node ' + n.status + '" data-id="' + n.id + '" style="left:' + p.x + 'px;top:' + p.y + 'px;width:' + NW + 'px;height:' + NH + 'px" aria-label="' + esc(n.label + ", " + n.status + ". Open details") + '">' +
+        '<span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+        '<span style="min-width:0;overflow:hidden"><span class="nm">' + esc(n.label) + '</span><span class="tc">' + esc(n.tech) + '</span></span>' + st + '</button>';
+    });
+    c.innerHTML = html;
+    c.querySelectorAll(".node").forEach((el) => {
+      el.addEventListener("click", () => openNode(el.dataset.id, el));
+      el.addEventListener("mouseenter", () => hot(el.dataset.id));
+      el.addEventListener("mouseleave", () => hot(null));
+      el.addEventListener("focus", () => hot(el.dataset.id));
+      el.addEventListener("blur", () => hot(null));
+    });
+  }
+
+  let dims = null;
+  function fit(W, H) {
+    if (W) dims = [W, H];
+    if (!dims) return;
+    const avail = $("cwrap").clientWidth;
+    const scale = Math.max(0.62, Math.min(1, avail / dims[0]));
+    $("canvas").style.transform = "scale(" + scale + ")";
+    $("cfit").style.width = dims[0] * scale + "px";
+    $("cfit").style.height = dims[1] * scale + "px";
+  }
+  window.addEventListener("resize", () => fit());
+
+  function hot(id) {
+    const c = $("canvas");
+    c.classList.toggle("hovering", !!id);
+    c.querySelectorAll(".hot").forEach((e) => e.classList.remove("hot"));
+    if (!id) return;
+    const linked = new Set([id]);
+    c.querySelectorAll("[data-a]").forEach((e) => {
+      if (e.dataset.a === id || e.dataset.b === id) { e.classList.add("hot"); linked.add(e.dataset.a); linked.add(e.dataset.b); }
+    });
+    c.querySelectorAll(".node").forEach((e) => { if (linked.has(e.dataset.id)) e.classList.add("hot"); });
+  }
+
+  function list(items) { return items && items.length ? '<ul>' + items.map((i) => '<li>' + esc(i) + '</li>').join("") + '</ul>' : ""; }
+
+  function openNode(id, from) {
+    const n = tier.nodes.find((x) => x.id === id);
+    if (!n) return;
+    if (from) opener = from;
+    const m = $("modal");
+    const statusText = { new: "New at " + tier.label, changed: "Changed at " + tier.label, same: "Unchanged at " + tier.label, removed: "Removed at " + tier.label }[n.status];
+    const conns = tier.edges.filter((e) => e.from === id || e.to === id).map((e) => {
+      const other = e.from === id ? e.to : e.from;
+      const o = tier.nodes.find((x) => x.id === other);
+      return o ? '<button class="conn" data-go="' + o.id + '">' + (e.from === id ? "→ " : "← ") + esc(o.label) + (e.label ? " · " + esc(e.label) : "") + '</button>' : "";
+    }).join("");
+    let body = '<div class="pills"><span class="pill ' + n.status + '">' + esc(statusText) + '</span>' + (n.cost ? '<span class="pill same">' + esc(n.cost) + '</span>' : "") + '</div>';
+    if (n.serves && n.serves.length) body += '<div class="sec"><h4>Why this problem needs it</h4><div class="serves">' + n.serves.map((r) => '<div><b>' + esc(r) + '</b>' + esc(reqText[r] || "") + '</div>').join("") + '</div></div>';
+    if (n.role) body += '<div class="sec"><h4>Role</h4><p>' + esc(n.role) + '</p></div>';
+    if (n.specifics && n.specifics.length) body += '<div class="sec"><h4>Specifics</h4>' + list(n.specifics) + '</div>';
+    if (n.tradeoffs && n.tradeoffs.length) body += '<div class="sec"><h4>Trade-offs</h4>' + list(n.tradeoffs) + '</div>';
+    const altSrc = n.alternatives != null ? n.alternatives : (DESIGN.tiers.slice(0, DESIGN.tiers.indexOf(tier)).reverse().map((t) => (t.nodes.find((x) => x.id === n.id) || {}).alternatives).find((a) => a != null));
+    body += '<div class="sec"><h4>Alternatives considered</h4>' + (Array.isArray(altSrc) && altSrc.length
+      ? '<div class="alts">' + altSrc.map((a) => '<div><strong>' + esc(a.what) + '</strong><span>' + esc(a.why) + '</span></div>').join("") + '</div>'
+      : '<p class="muted">' + esc(typeof altSrc === "string" && altSrc ? altSrc : "No alternatives were considered for this component.") + '</p>') + '</div>';
+    if (n.failures && n.failures.length) body += '<div class="sec"><h4>Failure modes</h4><div class="fail">' + n.failures.map((f) => '<div><strong>' + esc(f.mode) + '</strong><span>' + esc(f.mitigation) + '</span></div>').join("") + '</div></div>';
+    if (n.breaks) body += '<div class="next"><h4 class="eyebrow" style="margin:0">What breaks next</h4><p>' + esc(n.breaks) + '</p>' + (n.trigger ? '<p class="trigger">Trigger: ' + esc(n.trigger) + '</p>' : "") + '</div>';
+    if (conns) body += '<div class="sec"><h4>Connections</h4><div class="conns">' + conns + '</div></div>';
+    m.innerHTML = '<div class="m-head"><span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+      '<div style="min-width:0"><h3 id="m-name">' + esc(n.label) + '</h3><div class="m-tech">' + esc(n.tech) + '</div></div>' +
+      '<button class="close" aria-label="Close details">' + CLOSE + '</button></div><div class="m-body">' + body + '</div>';
+    m.querySelector(".close").addEventListener("click", () => m.close());
+    m.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => openNode(b.dataset.go)));
+    if (!m.open) m.showModal();
+    m.querySelector(".close").focus();
+  }
+  $("modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $("modal").addEventListener("close", () => { if (opener && document.contains(opener)) opener.focus(); });
+
+  function cards() {
+    $("moves").innerHTML = tier.moves.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span>' + (x.driver ? '<span class="driver"><b>Driven by</b> ' + esc(x.driver) + '</span>' : "") + '<span class="trigger">Trigger: ' + esc(x.trigger) + '</span></li>').join("");
+    $("rejected").innerHTML = tier.rejected.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span></li>').join("");
+    const L = DESIGN.load;
+    $("load").innerHTML = '<tr><th></th>' + DESIGN.tiers.map((t) => '<th>' + esc(t.label) + '</th>').join("") + '</tr>' +
+      L.rows.map((r, i) => '<tr><td>' + esc(r) + '</td>' + DESIGN.tiers.map((t) => '<td class="num' + (t.id === tier.id ? " cur" : "") + '">' + esc(L.values[t.id][i]) + '</td>').join("") + '</tr>').join("");
+    $("load-note").textContent = L.note || "";
+  }
+
+  function show() {
+    const id = location.hash.slice(1);
+    tier = DESIGN.tiers.find((t) => t.id === id) || DESIGN.tiers[0];
+    DESIGN.tiers.forEach((t) => $("tab-" + t.id).setAttribute("aria-selected", String(t.id === tier.id)));
+    $("tier-title").textContent = tier.title;
+    $("tier-summary").textContent = tier.summary;
+    if ($("modal").open) $("modal").close();
+    $("canvas").classList.toggle("baseline", tier === DESIGN.tiers[0]); /* nothing changes at the first tier */
+    draw(); cards();
+  }
+  window.addEventListener("hashchange", show);
+  show();
+})();
+</script>

@@ -1,0 +1,15 @@
+{
+  "name": "archladder",
+  "description": "archladder: repo-grounded system design from 1k to 10M users.",
+  "owner": {
+    "name": "Khubaib Qaiser",
+    "url": "https://github.com/KhubaibQaiser"
+  },
+  "plugins": [
+    {
+      "name": "archladder",
+      "source": "./",
+      "description": "Repo-grounded system design from 1k to 10M users, driven by your workload profile, with an interactive design page."
+    }
+  ]
+}

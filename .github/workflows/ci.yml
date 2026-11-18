@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Manifests are valid JSON
+        run: |
+          set -euo pipefail
+          for f in .claude-plugin/*.json; do node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))"; done
+      - name: Template and examples pass the design checker
+        run: node scripts/check-design.mjs assets/system-design.html examples/*/index.html
