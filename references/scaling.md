@@ -118,7 +118,7 @@ Cost: money only. Limits: a hard ceiling and still a single point of failure.
 autoscaling. Sessions and uploads out of local memory and disk. Serverless gives this by default but
 multiplies database connections. Trigger: app CPU or latency rising with traffic.
 
-**Connection pooling.** PgBouncer, Supavisor or the platform's pooler in transaction mode. Trigger:
+**Connection pooling.** PgBouncer, RDS Proxy, Supavisor or the platform's own pooler in transaction mode. Trigger:
 connections near the database limit. Watch for features transaction pooling breaks (prepared
 statements, advisory locks, `SET`).
 

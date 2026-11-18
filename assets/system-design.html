@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Caseflow System Design</title>
+<title>Project System Design</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
@@ -128,7 +128,7 @@ svg.wires { position: absolute; inset: 0; overflow: visible; pointer-events: non
 .prof { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere }
 .prof .v { font: 600 14.5px/1.3 var(--font-body) }
 .prof .d { font-size: 13px; color: var(--ink-2) }
-.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; border: 1px solid currentColor }
+.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px/1.45 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; border: 1px solid currentColor; max-width: 100% }
 .src.repo { color: var(--z-edge-ink) } .src.brief { color: var(--z-client-ink) } .src.user { color: var(--new) } .src.inferred { color: var(--changed) } .src.unknown { color: var(--removed) }
 .driver { font-size: 13px }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0 }
@@ -212,354 +212,67 @@ dialog::backdrop { background: rgba(8, 12, 18, .5) }
    zone: one of DESIGN.zones ids (the column). row: 0-based row inside the zone.
    status: new | changed | same | removed. icon: a key of ICONS below. */
 const DESIGN = {
-  title: "Caseflow System Design",
-  stack: "Next.js 16 on Vercel · Supabase",
-  problem: "Caseflow as the intake CRM of one global legal network: a single organisation with offices on several continents. Staff search and triage contacts, keep notes and an activity timeline, and work a pipeline board together, seeing each other's moves and presence in under a second. Client data stays in its jurisdiction.",
+  /* Skeleton only. Replace every value with this project's real stack, requirements and numbers.
+     Field reference: references/design-schema.md. Filled examples live in the examples folder.
+     Use the five default tiers (x1 to x10000); two are shown here to keep the skeleton short. */
+  title: "Project System Design",
+  stack: "<framework> on <host> · <database>",
+  problem: "<One paragraph restating the problem from the brief and the project's own docs.>",
   requirements: [
-    { id: "R1", text: "Search, filter and urgency-sort contacts, 250 rows per page" },
-    { id: "R2", text: "Pipeline board, Lead / Active / Closed, many editors at once" },
-    { id: "R3", text: "Admin and viewer roles enforced on the server" },
-    { id: "R4", text: "Notes and an activity timeline per contact" },
-    { id: "R5", text: "p95 under 300 ms in every region, works on mobile" },
-    { id: "R6", text: "Board moves and presence show in under 1 s" },
-    { id: "R7", text: "Client data stays in its home jurisdiction" }
+    { id: "R1", text: "<Main user-facing requirement from the brief>" },
+    { id: "R2", text: "<Latency, availability or data rule from the brief>" }
   ],
   profile: [
-    { label: "Read to write", value: "Read-heavy, about 10:1", source: "inferred", drives: "Indexes, caches and replicas carry the read side. Writes stay on one primary per region for a long time." },
-    { label: "Connection model", value: "Two-way persistent: live board plus presence", source: "user", drives: "Concurrent sockets, not RPS, become the first real limit. Managed realtime first, a gateway fleet at the top tier." },
-    { label: "Freshness", value: "Sub-second for board moves and presence", source: "user", drives: "Rules out polling as the main path. Polling stays only as the degraded mode." },
-    { label: "Tenancy", value: "Single tenant: one organisation, many offices", source: "user", drives: "No customer-level shard key. The home region, then the office, becomes the partition key." },
-    { label: "Geography and data rules", value: "Global from 10k DAU, data stays in its jurisdiction", source: "user", drives: "Residency, not load, forces a second home region at 10k. No replica may copy data across borders." },
-    { label: "Traffic shape", value: "Office hours following the sun, Monday-morning peaks about 3x", source: "inferred", drives: "Each region peaks at a different time, so regions are sized separately. Peak factor 3 in the load numbers." },
-    { label: "Background work", value: "None in the brief today", source: "repo: docs/SPEC.md", drives: "No queue until search indexing needs one at 1M DAU." },
-    { label: "Stack", value: "Next.js 16 on Vercel, Supabase Postgres, Auth and Realtime", source: "repo: package.json", drives: "Stay on these platforms until a tier's numbers exceed them. Leaving one is a decision for the owner." }
+    { label: "Read to write", value: "<ratio>", source: "unknown", drives: "<What this changes in the design>" },
+    { label: "Connection model", value: "<request and response, one-way push or two-way>", source: "unknown", drives: "<What this changes in the design>" }
   ],
   zones: [
     { id: "client", label: "Client" },
-    { id: "edge", label: "Edge" },
     { id: "app", label: "Application" },
-    { id: "data", label: "Data" },
-    { id: "services", label: "Platform services" }
+    { id: "data", label: "Data" }
   ],
   load: {
-    note: "Per user per day: 200 reads, 20 writes, 8-hour active window per region, peak factor 3, 30% online at peak with one socket each.",
-    rows: ["Peak reads / writes per second", "Concurrent sockets", "Contacts", "Activity rows", "Home regions", "Availability target"],
-    values: {
-      x1: ["20 / 2", "300", "200k", "4M", "1", "99.5%"],
-      x10: ["210 / 21", "3k", "2M", "40M", "2", "99.9%"],
-      x100: ["2.1k / 210", "30k", "20M", "400M", "3", "99.9%"],
-      x1000: ["21k / 2.1k", "300k", "200M", "4B", "3", "99.95%"],
-      x10000: ["210k / 21k", "3M", "2B", "40B", "5", "99.99%"]
-    }
+    note: "<Formula inputs: actions per user per day, peak factor, share online at peak.>",
+    rows: ["<Peak rate, adapted to the workload>", "<Data size>"],
+    values: { x1: ["<n>", "<n>"], x10: ["<n>", "<n>"] }
   },
   tiers: [
     {
-      id: "x1", label: "1x", short: "1k DAU", title: "1k DAU: one region, managed everything",
-      summary: "Server-rendered pages and RLS-guarded RPCs on one Supabase project. Presence and live board moves already need two-way sockets, so Supabase Realtime is in from day one.",
+      id: "x1", label: "1x", short: "1k DAU", title: "1k DAU: <what ships first>",
+      summary: "<What the first tier is and why it is enough.>",
       nodes: [
-        { id: "browser", label: "Browser", tech: "RSC pages, live board channel", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R1", "R2", "R5", "R6"],
-          alternatives: [{what: "Native mobile app", why: "The brief needs a working mobile web view, not an app store release."}, {what: "Client-rendered SPA", why: "Server components keep the /contacts JS budget under 220 kB."}],
-          role: "Renders server components, keeps filters and sort in the URL, joins the board's channel for moves and presence.",
-          specifics: ["Optimistic board moves, rolled back with a retry toast", "Resync columns from an updated_at cursor on reconnect", "JS budget under 220 kB on /contacts"],
-          tradeoffs: ["One socket per open tab"], failures: [{ mode: "Socket drops", mitigation: "Backoff reconnect, quiet reconnecting state, then refetch" }],
-          breaks: "Nothing at 300 sockets.", trigger: "", cost: "Free" },
-        { id: "edge", label: "Vercel edge + proxy", tech: "proxy.ts, CSP nonce, session refresh", icon: "globe", zone: "edge", row: 0, status: "same", serves: ["R3", "R5"],
-          alternatives: "No direct alternative: Vercel's proxy is part of the hosting platform already in use.",
-          role: "Refreshes the session cookie, sets a per-request CSP nonce, redirects signed-out users.",
-          specifics: ["Static assets cached at the edge"], tradeoffs: ["Dynamic pages are never cached"],
-          failures: [{ mode: "Proxy throws", mitigation: "Fails closed to sign-in" }], breaks: "", trigger: "", cost: "Pro plan" },
-        { id: "app", label: "Server pages & actions", tech: "Vercel Functions in iad1, Zod at boundaries", icon: "lambda", zone: "app", row: 0, status: "same", serves: ["R1", "R2", "R3", "R4"],
-          alternatives: [{what: "Separate API service (Node or Go)", why: "Adds a deploy and a network hop with no requirement that needs it."}, {what: "Supabase Edge Functions", why: "Splits logic across two runtimes while the app already runs on Vercel."}],
-          role: "Reads through lib/data, writes through server actions that call RPCs, then broadcasts the change to the board channel.",
-          specifics: ["requirePermission() before every action", "Offset pages 25 to 500, default 250"],
-          tradeoffs: ["Each invocation opens its own connection"], failures: [{ mode: "RPC returns an unexpected shape", mitigation: "Zod rejects it, error boundary offers retry" }],
-          breaks: "Direct connections pile up with concurrency.", trigger: "Connections above 60% of the limit", cost: "Included" },
-        { id: "db", label: "Supabase Postgres + RLS", tech: "RPCs, urgency sort in SQL, small compute", icon: "database", zone: "data", row: 0, status: "same", serves: ["R1", "R2", "R3", "R4"],
-          alternatives: [{what: "Firebase / Firestore", why: "Weak fit for urgency sort, filters and transactional status moves."}, {what: "PlanetScale (MySQL)", why: "No RLS, so roles would be enforced only in app code."}],
-          role: "Single source of truth. RLS enforces roles, an RPC makes a status move and its activity row one transaction.",
-          specifics: ["Anon has no table access"], tradeoffs: ["One region, so far users pay the latency"],
-          failures: [{ mode: "Instance restart", mitigation: "Platform restart, idempotent writes retry" }],
-          breaks: "ILIKE search and deep offsets slow past about 1M contacts.", trigger: "List p95 above 300 ms", cost: "~$25/mo est." },
-        { id: "auth", label: "Supabase Auth", tech: "email + password, admin-created accounts", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
-          alternatives: [{what: "Clerk or Auth0", why: "A second vendor, and RLS would need custom JWT mapping."}],
-          role: "Issues sessions. Roles live in a profiles table that RLS reads.", specifics: ["Public sign-up off"], tradeoffs: [],
-          failures: [{ mode: "Auth outage", mitigation: "Existing sessions work until expiry" }], breaks: "", trigger: "", cost: "Included" },
-        { id: "rt", label: "Supabase Realtime", tech: "private board channel, Broadcast + Presence", icon: "broadcast", zone: "services", row: 1, status: "same", serves: ["R2", "R6"],
-          alternatives: [{what: "Polling every few seconds", why: "Can't meet sub-second moves or presence."}, {what: "Pusher or Ably", why: "Another vendor, and channel auth would bypass the existing RLS."}],
-          role: "Carries board moves and who-is-here presence over one socket per tab.",
-          specifics: ["Private channels authorized by RLS on realtime.messages", "Server broadcasts one message per move, events are hints"],
-          tradeoffs: ["Plan quotas on sockets and messages"], failures: [{ mode: "Realtime unavailable", mitigation: "Board falls back to 15 s polling" }],
-          breaks: "Message rate from presence grows with sockets x boards.", trigger: "Messages above 70% of plan quota", cost: "Included" }
+        { id: "client", label: "Client", tech: "<real product>", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R1"],
+          alternatives: "<[{ what, why }] or why there are none>",
+          role: "<Role>", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "app", label: "Application", tech: "<real product and setting>", icon: "server", zone: "app", row: 0, status: "same", serves: ["R1", "R2"],
+          alternatives: "<[{ what, why }] or why there are none>",
+          role: "<Role>", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "db", label: "Database", tech: "<real product and setting>", icon: "database", zone: "data", row: 0, status: "same", serves: ["R1"],
+          alternatives: "<[{ what, why }] or why there are none>",
+          role: "<Role>", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" }
       ],
-      edges: [
-        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "app" }, { from: "app", to: "db", label: "RPC + RLS" },
-        { from: "app", to: "auth", label: "session" }, { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
-      ],
-      moves: [{ what: "Baseline", why: "The smallest system that meets R1 to R6 in one region.", driver: "Presence and sub-second moves need sockets even at 1k DAU", trigger: "n/a" }],
-      rejected: [
-        { what: "Own websocket server", why: "300 sockets. Managed Realtime with RLS-authorized private channels covers presence." },
-        { what: "postgres_changes for the board", why: "Checks every change against every subscriber. One broadcast per move is cheaper." },
-        { what: "Redis or a job queue", why: "200k contacts are fast with indexes, and the brief has no side effects." },
-        { what: "The repo's keep-alive cron", why: "Exists only so the free tier doesn't pause. Paid compute doesn't." }
-      ]
+      edges: [{ from: "client", to: "app", label: "HTTPS" }, { from: "app", to: "db" }],
+      moves: [{ what: "Baseline", why: "<Why this is the smallest system that meets the requirements>", driver: "<profile row or number>", trigger: "n/a" }],
+      rejected: [{ what: "<Something considered>", why: "<Why not, in this problem's terms>" }]
     },
     {
-      id: "x10", label: "10x", short: "10k DAU", title: "10k DAU: a second home for residency",
-      summary: "Load is still small, but going global makes R7 bite: EU client data can't sit in a US database. A second Supabase project becomes the EU home, and a directory at the edge routes each user to their home.",
+      id: "x10", label: "10x", short: "10k DAU", title: "10k DAU: <what changes>",
+      summary: "<What changes, why, and whether the current platform is still the best fit.>",
       nodes: [
-        { id: "browser", label: "Browser", tech: "unchanged", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R2", "R6"],
-          role: "Unchanged. Connects to its home region's Realtime.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "edge", label: "Vercel edge + router", tech: "routes each request to its home region", icon: "globe", zone: "edge", row: 0, status: "changed", serves: ["R5", "R7"],
-          role: "Looks up the signed-in user's home region and sends the request to functions in that region.",
-          specifics: ["Unknown users go to sign-in, never to a default region"], tradeoffs: ["One more lookup per request, cached at the edge"],
-          failures: [{ mode: "Directory miss", mitigation: "Fail closed with an error state, never guess a region" }], breaks: "", trigger: "", cost: "" },
-        { id: "dir", label: "Region directory", tech: "Vercel Edge Config: user to home", icon: "lock", zone: "edge", row: 1, status: "new", serves: ["R7"],
-          alternatives: [{what: "Global lookup table in the US database", why: "Puts EU users' identity data in the US, breaking R7."}, {what: "Region in the subdomain (eu.app...)", why: "Users must know their region, and links break when an office moves."}],
-          role: "Maps each user and office to the home region that holds their data.",
-          specifics: ["Written only when an admin creates a user or moves an office"], tradeoffs: ["Edge Config writes are slow, fine for rare changes"],
-          failures: [{ mode: "Stale entry after an office move", mitigation: "Move runs as a planned migration with a read-only window" }],
-          breaks: "", trigger: "", cost: "Included" },
-        { id: "app", label: "Regional functions", tech: "iad1 and fra1, each talks to its home", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R1", "R4", "R5", "R7"],
-          role: "Runs next to each home database. Global admin views fan out to both homes and merge one page.",
-          specifics: ["Keyset pagination for board columns, 50 per request"], tradeoffs: ["Cross-home views cost two queries"],
-          failures: [{ mode: "One home slow", mitigation: "Global view shows the other home with a partial-results banner" }], breaks: "", trigger: "", cost: "" },
-        { id: "cache", label: "Next data cache", tech: "facet counts, tagged per role", icon: "zap", zone: "app", row: 1, status: "new", serves: ["R1"],
-          alternatives: [{what: "Redis", why: "A new service when the framework cache already handles tagged invalidation."}],
-          role: "Caches status counts per role and home, invalidated by tag on every contact write.",
-          specifics: ["Never shared across roles"], tradeoffs: ["Stale if a write path forgets to revalidate"],
-          failures: [{ mode: "Missed revalidation", mitigation: "Short TTL backstop" }], breaks: "", trigger: "Hit rate under 50%", cost: "Included" },
-        { id: "pool", label: "Supavisor pooler", tech: "transaction mode, one per home", icon: "funnel", zone: "data", row: 0, status: "new", serves: ["R5"],
-          alternatives: [{what: "PgBouncer self-hosted", why: "Supavisor is built in, nothing to run."}, {what: "Direct connections", why: "Serverless concurrency would exhaust the connection limit."}],
-          role: "Pools serverless connections in front of each home database.", specifics: ["No session SET or prepared statements"],
-          tradeoffs: ["Transaction mode breaks session features"], failures: [{ mode: "Pool exhausted", mitigation: "5 s statement timeout" }], breaks: "", trigger: "", cost: "Included" },
-        { id: "db", label: "Postgres US home", tech: "pg_trgm and keyset indexes, medium compute", icon: "database", zone: "data", row: 1, status: "changed", serves: ["R1", "R2", "R4"],
-          role: "Holds US and rest-of-world data. Adds trigram search and indexes matching each sort.",
-          specifics: ["Index (status, updated_at desc, id)"], tradeoffs: ["Indexes slow writes slightly"],
-          failures: [{ mode: "Seq scan on a new filter", mitigation: "Slow-query review each release" }],
-          breaks: "Reads dominate CPU as APAC offices join.", trigger: "Primary CPU above 70%, reads over 80%", cost: "~$60/mo est." },
-        { id: "dbeu", label: "Postgres EU home", tech: "separate Supabase project, eu-central-1", icon: "database", zone: "data", row: 2, status: "new", serves: ["R7"],
-          alternatives: [{what: "EU read replica of the US primary", why: "Copies EU data into the US primary, breaking R7."}, {what: "Row-level region column in one database", why: "The data still physically sits in one jurisdiction."}],
-          role: "Holds EU offices' client data. Same schema and migrations as the US home.",
-          specifics: ["Migrations run against every home in CI"], tradeoffs: ["Two projects to migrate, monitor and back up"],
-          failures: [{ mode: "Migration applied to one home only", mitigation: "CI fails unless every home reports the same version" }], breaks: "", trigger: "", cost: "~$60/mo est." },
-        { id: "auth", label: "Supabase Auth per home", tech: "user lives in its home project", icon: "key", zone: "services", row: 0, status: "changed", serves: ["R3", "R7"],
-          role: "Each user's account sits in their home project, so personal data also stays in region.", specifics: [], tradeoffs: ["Moving a user between homes is a migration"],
-          failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "rt", label: "Realtime per home", tech: "board channels stay in their region", icon: "broadcast", zone: "services", row: 1, status: "changed", serves: ["R6", "R7"],
-          role: "Each home's Realtime carries its own boards, so messages never cross a border.", specifics: [], tradeoffs: ["Cross-region boards are out of scope, a decision for the owner"],
-          failures: [{ mode: "Realtime unavailable", mitigation: "15 s polling fallback" }], breaks: "", trigger: "", cost: "" }
-      ],
-      edges: [
-        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
-        { from: "app", to: "pool", label: "SQL" }, { from: "pool", to: "db" }, { from: "pool", to: "dbeu", label: "EU" },
-        { from: "app", to: "cache", label: "facets" }, { from: "app", to: "auth", label: "session" },
-        { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
-      ],
-      moves: [
-        { what: "EU home project and a region directory", why: "EU client data can't live in the US database.", driver: "R7 residency, user confirmed global from 10k", trigger: "First EU office onboarded" },
-        { what: "Supavisor pooler", why: "Two regions of serverless functions multiply connections.", driver: "Serverless compute", trigger: "Connections above 60% of the limit" },
-        { what: "Trigram and keyset indexes", why: "2M contacts slow ILIKE search and deep offsets.", driver: "Read-heavy list and board", trigger: "List p95 above 300 ms" },
-        { what: "Facet cache by tag", why: "Every list view recounts statuses.", driver: "Read-heavy, 10:1", trigger: "Facet query in the top three by total time" }
-      ],
-      rejected: [
-        { what: "One US primary with an EU read replica", why: "Copies EU client data into the US. Breaks R7." },
-        { what: "Multi-region writes", why: "21 writes per second fit each home easily." },
-        { what: "Redis", why: "The framework cache covers facets, nothing else is hot yet." },
-        { what: "Self-run websocket gateway", why: "3k sockets are well inside managed Realtime." }
-      ]
-    },
-    {
-      id: "x100", label: "100x", short: "100k DAU", title: "100k DAU: replicas in region, presence under control",
-      summary: "A third home for APAC, read replicas inside each jurisdiction, partitioned activity, and Redis for shared counts and limits. Presence traffic becomes the realtime cost to manage.",
-      nodes: [
-        { id: "browser", label: "Browser", tech: "presence throttled to 1 update per 2 s", icon: "browser", zone: "client", row: 0, status: "changed", serves: ["R6"],
-          role: "Sends presence on focus change only, batched, and applies incoming moves per animation frame.", specifics: [], tradeoffs: ["Presence can lag up to 2 s, moves stay instant"],
-          failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "edge", label: "Vercel WAF + router", tech: "rate limits, bot rules, region routing", icon: "shield", zone: "edge", row: 0, status: "changed", serves: ["R3", "R5", "R7"],
-          role: "Adds firewall rules and per-user limits in front of the region router.", specifics: ["Stricter limits on sign-in"], tradeoffs: ["False positives need an allow list"],
-          failures: [{ mode: "Script bursts", mitigation: "429 with Retry-After" }], breaks: "", trigger: "", cost: "" },
-        { id: "dir", label: "Region directory", tech: "now US, EU and APAC", icon: "lock", zone: "edge", row: 1, status: "same", serves: ["R7"],
-          role: "Unchanged, one more region.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "app", label: "Regional functions", tech: "3 regions, replica reads, realtime breaker", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R1", "R2", "R5"],
-          role: "Sends list and board reads to the home's replica, except reads within 5 s of the user's own write.",
-          specifics: ["Circuit breaker on Realtime, opens to 15 s polling", "Bulkhead: search gets its own pool"], tradeoffs: ["Routing logic to test"],
-          failures: [{ mode: "Replica lag spike", mitigation: "All reads to the primary while lag exceeds 2 s" }], breaks: "", trigger: "", cost: "" },
-        { id: "redis", label: "Upstash Redis per region", tech: "facet counts, rate-limit buckets", icon: "zap", zone: "app", row: 1, status: "new", serves: ["R1", "R5"],
-          alternatives: [{what: "Keep the framework cache", why: "Per-instance caches stop agreeing at this instance count."}, {what: "Memcached (ElastiCache)", why: "No rate-limit primitives, and leaves the managed serverless model."}],
-          role: "Shared cache and token buckets across every function instance in the region.",
-          specifics: ["Request coalescing and TTL jitter on hot keys", "Regional, so cached data stays in jurisdiction"], tradeoffs: ["One more service per region"],
-          failures: [{ mode: "Redis down", mitigation: "Breaker skips the cache, reads the replica" }], breaks: "", trigger: "", cost: "~$30 to $100/mo est." },
-        { id: "cache", label: "Next data cache", tech: "replaced by Redis", icon: "zap", zone: "app", row: 2, status: "removed", serves: ["R1"],
-          role: "Removed. Per-instance caches stop agreeing at this instance count.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "pool", label: "Supavisor pooler", tech: "unchanged", icon: "funnel", zone: "data", row: 0, status: "same", serves: ["R5"],
+        { id: "client", label: "Client", tech: "unchanged", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R1"],
           role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "db", label: "Postgres homes x3", tech: "US, EU, APAC, activity partitioned by month", icon: "database", zone: "data", row: 1, status: "changed", serves: ["R4", "R7"],
-          role: "Each home takes its writes and post-write reads. The activity table, the fastest-growing, is partitioned by month.",
-          specifics: ["Larger compute in the busiest home"], tradeoffs: ["Partition maintenance"],
-          failures: [{ mode: "Primary failover", mitigation: "Platform failover, writes retry with idempotency keys" }],
-          breaks: "Search on 20M contacts starts to strain replicas.", trigger: "Search p95 above 300 ms", cost: "~$400/mo est." },
-        { id: "replica", label: "Read replicas in region", tech: "one per home, same jurisdiction", icon: "layers", zone: "data", row: 2, status: "new", serves: ["R1", "R2", "R7"],
-          alternatives: [{what: "Bigger primary only", why: "Vertical headroom runs out, and failover still has a single box."}, {what: "Cross-region replicas", why: "Would move data out of its jurisdiction."}],
-          role: "Serve list, board and detail reads without leaving the home's jurisdiction.", specifics: ["Lag alert above 2 s"], tradeoffs: ["Stale reads right after a write"],
-          failures: [{ mode: "Replica down", mitigation: "Reads fall back to the primary" }], breaks: "", trigger: "", cost: "~$300/mo est." },
-        { id: "auth", label: "Supabase Auth per home", tech: "unchanged", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "rt", label: "Realtime per home", tech: "30k sockets, presence batched", icon: "broadcast", zone: "services", row: 1, status: "changed", serves: ["R6"],
-          role: "Same channels with throttled presence, so message volume grows with users, not users squared.", specifics: [], tradeoffs: ["Plan upgrade for socket quotas"],
-          failures: [{ mode: "Quota hit at peak", mitigation: "Breaker opens to polling, alert at 70%" }], breaks: "Sockets near managed limits at 300k.", trigger: "Sockets above 70% of plan quota", cost: "Usage based" }
+        { id: "app", label: "Application", tech: "<what changed>", icon: "server", zone: "app", row: 0, status: "changed", serves: ["R1"],
+          role: "<Role>", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
+        { id: "db", label: "Database", tech: "unchanged", icon: "database", zone: "data", row: 0, status: "same", serves: ["R1"],
+          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" }
       ],
-      edges: [
-        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
-        { from: "app", to: "pool", label: "writes" }, { from: "pool", to: "db" }, { from: "app", to: "replica", label: "reads" },
-        { from: "db", to: "replica", label: "replicate", async: true }, { from: "app", to: "redis", label: "cache" },
-        { from: "app", to: "auth", label: "session" }, { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
-      ],
-      moves: [
-        { what: "APAC home", why: "APAC offices' data must stay in APAC.", driver: "R7 residency", trigger: "First APAC office onboarded" },
-        { what: "Read replicas inside each jurisdiction", why: "About 1k reads per second in the busiest home.", driver: "Read-heavy, 10:1", trigger: "Primary CPU above 70%, reads over 80%" },
-        { what: "Partition activity by month", why: "400M timeline rows slow vacuum and deletes.", driver: "Data growth on R4", trigger: "Activity above about 200M rows" },
-        { what: "Throttle and batch presence", why: "Presence messages grow fastest with 30k sockets.", driver: "Two-way connection model", trigger: "Messages above 70% of quota" },
-        { what: "Redis, WAF and breakers", why: "Shared counts and limits across instances, and containment when one dependency fails.", driver: "Many instances per region", trigger: "First incident caused by one dependency" }
-      ],
-      rejected: [
-        { what: "Sharding", why: "About 100 writes per second per home fit one primary." },
-        { what: "Cross-region replicas for latency", why: "Would copy client data across borders. Breaks R7." },
-        { what: "Search engine", why: "pg_trgm on the replicas still meets R1 at 20M contacts." },
-        { what: "Kafka", why: "Realtime is the only consumer of changes." }
-      ]
-    },
-    {
-      id: "x1000", label: "1000x", short: "1M DAU", title: "1M DAU: search engine, outbox, dedicated realtime",
-      summary: "Search moves to its own engine fed by an outbox, each home gets more replicas and a disaster-recovery standby, and 300k sockets need a dedicated realtime cluster.",
-      nodes: [
-        { id: "browser", label: "Browser", tech: "unchanged", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R6"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "edge", label: "Vercel WAF + router", tech: "unchanged", icon: "shield", zone: "edge", row: 0, status: "same", serves: ["R5"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "dir", label: "Region directory", tech: "unchanged", icon: "lock", zone: "edge", row: 1, status: "same", serves: ["R7"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "app", label: "Regional functions", tech: "autoscaled, bulkheads per path", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R1", "R5"],
-          role: "Separate concurrency limits for list, board, search and writes, so one slow path can't starve the rest.", specifics: ["Search queries go to the engine, not Postgres"],
-          tradeoffs: [], failures: [{ mode: "Search engine down", mitigation: "Fall back to prefix search on replicas with a notice" }], breaks: "", trigger: "", cost: "" },
-        { id: "redis", label: "Redis cluster per region", tech: "hot-key coalescing, rate limits", icon: "zap", zone: "app", row: 1, status: "changed", serves: ["R1", "R5"],
-          role: "Larger, clustered, with stampede protection on facet keys of the biggest offices.", specifics: [], tradeoffs: [],
-          failures: [{ mode: "Hot key on a big office", mitigation: "Coalesce and serve stale for 5 s" }], breaks: "", trigger: "", cost: "~$500/mo est." },
-        { id: "worker", label: "Outbox queue + workers", tech: "Supabase Queues (pgmq) and consumers", icon: "queue", zone: "data", row: 3, status: "new", serves: ["R1"],
-          alternatives: [{what: "Kafka or SQS", why: "Only one consumer (search), and pgmq keeps the outbox in the same transaction."}, {what: "Database triggers calling search directly", why: "Couples writes to search uptime."}],
-          role: "Read the outbox and update the search index. At-least-once, idempotent by contact id and version.",
-          specifics: ["Dead-letter queue with an alert"], tradeoffs: ["Search lags writes by about a second"],
-          failures: [{ mode: "Worker backlog", mitigation: "Autoscale on queue depth, alert at 1 min lag" }], breaks: "", trigger: "", cost: "" },
-        { id: "pool", label: "Supavisor pooler", tech: "unchanged", icon: "funnel", zone: "data", row: 0, status: "same", serves: ["R5"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "db", label: "Postgres homes x3", tech: "large compute, outbox table, DR standby", icon: "database", zone: "data", row: 1, status: "changed", serves: ["R4", "R5"],
-          role: "Writes the outbox row in the same transaction as the change. Each home has a standby in a second zone.",
-          specifics: ["Recovery time under 15 min, data loss under 1 min, stated in the runbook"], tradeoffs: ["Standby doubles database cost"],
-          failures: [{ mode: "Zone outage", mitigation: "Promote the standby" }],
-          breaks: "About 1k writes per second in the busiest home nears one primary's comfort zone.", trigger: "Write CPU above 60% at peak", cost: "~$3k/mo est." },
-        { id: "replica", label: "Read replicas in region", tech: "three per home", icon: "layers", zone: "data", row: 2, status: "changed", serves: ["R1", "R2"],
-          role: "More replicas for about 10k reads per second in the busiest home.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "~$2k/mo est." },
-        { id: "auth", label: "Supabase Auth per home", tech: "unchanged", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "rt", label: "Realtime, dedicated", tech: "300k sockets, dedicated cluster per home", icon: "broadcast", zone: "services", row: 1, status: "changed", serves: ["R6"],
-          role: "Moves to dedicated capacity so socket and message limits are contractual.", specifics: ["Needs a sales conversation with Supabase, a decision for the owner"],
-          tradeoffs: ["Enterprise pricing"], failures: [{ mode: "Cluster degraded", mitigation: "Breaker to polling" }], breaks: "3M sockets exceed a managed cluster per home.", trigger: "Sockets above 70% of contract", cost: "Contract" },
-        { id: "search", label: "Typesense per region", tech: "contacts index fed by the outbox", icon: "search", zone: "services", row: 2, status: "new", serves: ["R1", "R7"],
-          alternatives: [{what: "Elasticsearch / OpenSearch", why: "Heavier to run for name, email and phone search."}, {what: "Keep pg_trgm on replicas", why: "Misses the 300 ms budget at 200M contacts."}],
-          role: "Typo-tolerant search over 200M contacts, one cluster per home, so the index stays in jurisdiction.", specifics: ["Index holds only searchable fields"],
-          tradeoffs: ["A second copy of data to keep consistent"], failures: [{ mode: "Index drift", mitigation: "Nightly reconciliation against Postgres" }], breaks: "", trigger: "", cost: "~$1k/mo est." }
-      ],
-      edges: [
-        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
-        { from: "app", to: "pool", label: "writes" }, { from: "pool", to: "db" }, { from: "app", to: "replica", label: "reads" },
-        { from: "db", to: "replica", label: "replicate", async: true }, { from: "app", to: "redis", label: "cache" },
-        { from: "db", to: "worker", label: "outbox", async: true }, { from: "worker", to: "search", label: "index", async: true },
-        { from: "app", to: "search", label: "search" }, { from: "app", to: "auth", label: "session" },
-        { from: "app", to: "rt", label: "broadcast", async: true }, { from: "rt", to: "browser", label: "WS", async: true }
-      ],
-      moves: [
-        { what: "Search engine fed by an outbox", why: "Trigram search over 200M contacts misses the budget.", driver: "Data growth on R1", trigger: "Search p95 above 300 ms on replicas" },
-        { what: "Dedicated realtime capacity", why: "300k sockets pass shared-plan limits.", driver: "Two-way connection model", trigger: "Sockets above 70% of quota" },
-        { what: "Standby per home", why: "99.95% can't survive a zone outage without one.", driver: "Availability target", trigger: "Target raised to 99.95%" },
-        { what: "Bulkheads and more replicas", why: "10k reads per second in the busiest home.", driver: "Read-heavy, Monday peaks 3x", trigger: "Replica CPU above 70% at peak" }
-      ],
-      rejected: [
-        { what: "Sharding", why: "The busiest home's ~1k writes per second still fit a large primary." },
-        { what: "Kafka", why: "Search is the only consumer, the pgmq outbox covers it." },
-        { what: "Self-run websocket fleet", why: "Dedicated managed capacity avoids running stateful sockets." },
-        { what: "Active-active writes", why: "Each record has one home, so no write conflicts exist to solve." }
-      ]
-    },
-    {
-      id: "x10000", label: "10000x", short: "10M DAU", title: "10M DAU: geo-partitioned SQL, an event stream, a socket fleet",
-      summary: "21k writes per second and five jurisdictions outgrow one Postgres primary per home. The data tier becomes a geo-partitioned distributed SQL database, changes flow through an event stream to every consumer, and sockets move to a gateway fleet.",
-      nodes: [
-        { id: "browser", label: "Browser", tech: "unchanged", icon: "browser", zone: "client", row: 0, status: "same", serves: ["R6"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "edge", label: "Vercel WAF + router", tech: "five regions", icon: "shield", zone: "edge", row: 0, status: "same", serves: ["R5"],
-          role: "Unchanged, more regions.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "dir", label: "Region directory", tech: "user and office to home", icon: "lock", zone: "edge", row: 1, status: "same", serves: ["R7"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "app", label: "Regional cells", tech: "full stack per region, no cross-cell calls", icon: "lambda", zone: "app", row: 0, status: "changed", serves: ["R5", "R7"],
-          role: "Each region runs as an independent cell, so an outage stays inside one region.", specifics: [], tradeoffs: ["Global views go through the warehouse, not live queries"],
-          failures: [{ mode: "Cell outage", mitigation: "Only that region degrades" }], breaks: "", trigger: "", cost: "" },
-        { id: "redis", label: "Redis cluster per region", tech: "unchanged", icon: "zap", zone: "app", row: 1, status: "same", serves: ["R1"],
-          role: "Unchanged.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "worker", label: "Stream consumers", tech: "archive and reconciliation jobs", icon: "worker", zone: "app", row: 2, status: "changed", serves: ["R4"],
-          role: "Consume the event stream to archive old activity and reconcile the search index.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "dsql", label: "Distributed SQL", tech: "YugabyteDB, geo-partitioned by home", icon: "database", zone: "data", row: 0, status: "new", serves: ["R1", "R2", "R4", "R7"],
-          alternatives: [{what: "Hand-sharded Postgres (Citus)", why: "No built-in geo-pinning per row for residency."}, {what: "CockroachDB", why: "Also fits. Licence and cost terms tip it toward YugabyteDB, a decision for the owner."}],
-          role: "One logical Postgres-compatible database, with each row pinned to its home region's nodes and writes spread across them.",
-          specifics: ["Partition key: home region, then office", "Follower reads replace replicas"],
-          tradeoffs: ["One-way door: leaving Supabase's data tier needs an ADR", "Some Postgres features and extensions differ"],
-          failures: [{ mode: "Node loss", mitigation: "Raft replication inside the region" }], breaks: "", trigger: "", cost: "~$40k/mo est." },
-        { id: "stream", label: "Event stream", tech: "Kafka (MSK) fed by CDC", icon: "queue", zone: "data", row: 1, status: "new", serves: ["R1", "R6"],
-          alternatives: [{what: "Keep pgmq outboxes", why: "Four consumers need ordered replay, which a queue doesn't give."}, {what: "Kinesis", why: "Fits too. Kafka (MSK) has the wider connector ecosystem for CDC and warehouse sinks."}],
-          role: "Every change flows once to search, realtime, the warehouse and the archive.", specifics: ["Topic per region, partitioned by contact id"],
-          tradeoffs: ["Real operations cost"], failures: [{ mode: "Consumer lag", mitigation: "Per-consumer lag alerts, replay from offset" }], breaks: "", trigger: "", cost: "~$5k/mo est." },
-        { id: "archive", label: "Cold archive", tech: "activity over 2 years, Parquet on S3", icon: "storage", zone: "data", row: 2, status: "new", serves: ["R4", "R7"],
-          alternatives: [{what: "Keep all activity hot", why: "40B rows make hot storage and vacuum the main cost."}],
-          role: "Old timeline rows leave the hot database. The timeline loads them on demand.", specifics: ["Bucket per region"], tradeoffs: ["Old activity loads slower"],
-          failures: [], breaks: "", trigger: "", cost: "~$1k/mo est." },
-        { id: "pg", label: "Postgres homes + replicas", tech: "migrated to distributed SQL", icon: "database", zone: "data", row: 3, status: "removed", serves: ["R4"],
-          alternatives: "Replaced by distributed SQL. See that component for the alternatives.",
-          role: "Removed after a staged migration (dual writes, backfill, switch reads, then cut over).", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "auth", label: "Supabase Auth per home", tech: "unchanged, or SSO, a decision", icon: "key", zone: "services", row: 0, status: "same", serves: ["R3"],
-          role: "Can stay on Supabase even after the data tier moves.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "" },
-        { id: "rt", label: "Socket gateway fleet", tech: "Ably, or self-run on NATS, a decision", icon: "gateway", zone: "services", row: 1, status: "changed", serves: ["R6"],
-          alternatives: [{what: "Stay on dedicated Supabase Realtime", why: "3M sockets exceed a managed cluster per home."}, {what: "Self-run gateway on NATS", why: "Cheaper at scale but needs on-call for stateful sockets."}],
-          role: "Holds 3M sockets with a backplane so any node reaches any board's subscribers.",
-          specifics: ["Presence with heartbeats and expiry", "Resync from a cursor on reconnect"], tradeoffs: ["Managed costs more, self-run needs on-call"],
-          failures: [{ mode: "Gateway node loss", mitigation: "Clients reconnect to another node and resync" }], breaks: "", trigger: "", cost: "~$20k/mo est." },
-        { id: "search", label: "Typesense per region", tech: "fed by the stream", icon: "search", zone: "services", row: 2, status: "changed", serves: ["R1"],
-          role: "Now indexes from the stream instead of an outbox.", specifics: [], tradeoffs: [], failures: [], breaks: "", trigger: "", cost: "~$8k/mo est." },
-        { id: "wh", label: "Warehouse", tech: "BigQuery, regional datasets", icon: "chart", zone: "services", row: 3, status: "new", serves: ["R1", "R7"],
-          alternatives: [{what: "Snowflake", why: "Fits too. BigQuery's regional datasets match the residency model with less setup."}, {what: "Query the transactional nodes", why: "Reporting load would compete with R5's latency budget."}],
-          role: "Global reporting and cross-region views, off the transactional path.", specifics: ["Aggregates only cross borders, raw rows stay regional"],
-          tradeoffs: ["Minutes behind live data"], failures: [], breaks: "", trigger: "", cost: "~$3k/mo est." }
-      ],
-      edges: [
-        { from: "browser", to: "edge", label: "HTTPS" }, { from: "edge", to: "dir", label: "lookup" }, { from: "edge", to: "app" },
-        { from: "app", to: "dsql", label: "SQL" }, { from: "app", to: "redis", label: "cache" },
-        { from: "dsql", to: "stream", label: "CDC", async: true }, { from: "stream", to: "worker", label: "events", async: true },
-        { from: "worker", to: "archive", label: "archive", async: true },
-        { from: "stream", to: "search", label: "index", async: true }, { from: "stream", to: "rt", label: "fan-out", async: true },
-        { from: "stream", to: "wh", label: "sink", async: true }, { from: "app", to: "search", label: "search" },
-        { from: "app", to: "auth", label: "session" }, { from: "rt", to: "browser", label: "WS", async: true }
-      ],
-      moves: [
-        { what: "Geo-partitioned distributed SQL", why: "21k writes per second and five jurisdictions outgrow one primary per home.", driver: "Write volume and R7 residency together", trigger: "Busiest home's write CPU above 60% after partitioning" },
-        { what: "Event stream with CDC", why: "Four consumers now need every change, in order, with replay.", driver: "Search, realtime, warehouse and archive", trigger: "A third consumer of changes" },
-        { what: "Socket gateway fleet", why: "3M sockets with presence.", driver: "Two-way connection model", trigger: "Managed cluster above 70% of contract" },
-        { what: "Cold archive and a warehouse", why: "40B activity rows and global reporting.", driver: "Data growth on R4, single-org global views", trigger: "Hot storage cost or reporting load on transactional nodes" }
-      ],
-      rejected: [
-        { what: "Hand-rolled Postgres sharding", why: "Distributed SQL gives geo-partitioning and rebalancing, hand sharding rebuilds both." },
-        { what: "Multi-master Postgres", why: "Conflicting status moves on R2 are a correctness risk with no upside, since each record has one home." },
-        { what: "Microservices split", why: "One product and one team. Cells give isolation without service sprawl." }
-      ]
+      edges: [{ from: "client", to: "app", label: "HTTPS" }, { from: "app", to: "db" }],
+      moves: [{ what: "<Move>", why: "<Why>", driver: "<profile row or number>", trigger: "<metric>" }],
+      rejected: [{ what: "Stay on <current platform> as is", why: "<Why the platform still fits, or why it doesn't>" }]
     }
   ]
-};</script>
+};
+</script>
 <script>
 (function () {
   const ICONS = {
@@ -687,7 +400,7 @@ const DESIGN = {
       const cls = 'wire ' + (e.async ? "async" : "sync");
       wires += '<path class="' + cls + '" data-a="' + e.from + '" data-b="' + e.to + '" d="' + w.d + '" marker-end="url(#ah)"/>';
       if (e.label) {
-        const txt = e.label.length > 14 ? e.label.slice(0, 13) + "…" : e.label;
+        const txt = e.label.length > 10 ? e.label.slice(0, 9) + "…" : e.label;
         const tw = txt.length * 6.4 + 14, lx = w.inset ? w.mx + 4 + tw / 2 : w.side ? w.mx + 8 + tw / 2 : w.mx;
         labels += '<g class="wire-label" data-a="' + e.from + '" data-b="' + e.to + '"><rect x="' + (lx - tw / 2) + '" y="' + (w.my - 10) + '" width="' + tw + '" height="20" rx="10"/><text x="' + lx + '" y="' + (w.my + 3.8) + '" text-anchor="middle">' + esc(txt) + '</text><title>' + esc(e.label) + '</title></g>';
       }

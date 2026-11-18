@@ -11,7 +11,7 @@ const ICONS = new Set(["browser", "mobile", "user", "globe", "shield", "balancer
 const ZONES = new Set(["client", "edge", "app", "data", "services"]);
 const STATUSES = new Set(["new", "changed", "same", "removed"]);
 const SOURCES = /^(repo|brief|user|inferred|unknown)\b/i;
-const LIMITS = { label: 26, tech: 44, edgeLabel: 14, rows: 4, longEdges: 4 };
+const LIMITS = { label: 26, tech: 44, edgeLabel: 10, rows: 4, longEdges: 4 };
 
 function loadDesign(html) {
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
@@ -19,6 +19,43 @@ function loadDesign(html) {
   if (!src) throw new Error("no <script> with `const DESIGN =` found");
   if (!scripts.some((s) => /function draw\(/.test(s))) throw new Error("template renderer script is missing, copy assets/system-design.html and replace only DESIGN");
   return vm.runInNewContext(src + "\n;DESIGN", {}, { timeout: 1000 });
+}
+
+// Mirrors the layout maths in assets/system-design.html (pos, wirePath, label placement).
+// Keep these constants in sync with the template.
+const G = { NW: 216, NH: 112, CW: 300, RH: 136, TOP: 58, PADX: 20, CH: 20 };
+G.GAP = G.CW - G.NW;
+function labelCollisions(t, zoneIdx) {
+  const { NW, NH, CW, RH, TOP, PADX, CH, GAP } = G;
+  const byId = Object.fromEntries(t.nodes.map((n) => [n.id, n]));
+  const pos = (n) => ({ x: PADX + zoneIdx[n.zone] * CW + (CW - NW) / 2, y: TOP + n.row * RH });
+  const edges = t.edges.filter((e) => byId[e.from] && byId[e.to]);
+  const long = edges.filter((e) => Math.abs(zoneIdx[byId[e.from].zone] - zoneIdx[byId[e.to].zone]) > 1);
+  const channelTop = TOP + Math.max(...t.nodes.map((n) => n.row)) * RH + NH + 28;
+  const boxes = [];
+  for (const e of edges) {
+    if (!e.label) continue;
+    const a = byId[e.from], b = byId[e.to], pa = pos(a), pb = pos(b), ca = zoneIdx[a.zone], cb = zoneIdx[b.zone];
+    const txt = e.label.length > LIMITS.edgeLabel ? e.label.slice(0, LIMITS.edgeLabel - 1) + "…" : e.label;
+    const tw = txt.length * 6.4 + 14;
+    let lx, ly;
+    if (ca === cb && Math.abs(a.row - b.row) > 1) { lx = pa.x + NW + 18 + 4 + tw / 2; ly = (pa.y + pb.y + NH) / 2; }
+    else if (ca === cb) { const down = pb.y > pa.y; ly = ((down ? pa.y + NH : pa.y) + (down ? pb.y : pb.y + NH)) / 2; lx = pa.x + NW / 2 + 8 + tw / 2; }
+    else {
+      const right = cb > ca, x1 = right ? pa.x + NW : pa.x, x2 = right ? pb.x : pb.x + NW;
+      if (Math.abs(cb - ca) === 1) { lx = (x1 + x2) / 2; ly = (pa.y + pb.y + NH) / 2; }
+      else {
+        const k = long.indexOf(e), off = (k % 4) * 6 - 9;
+        lx = (x1 + (right ? GAP / 2 : -GAP / 2) + off + x2 + (right ? -GAP / 2 : GAP / 2) - off) / 2; ly = channelTop + k * CH;
+      }
+    }
+    boxes.push({ name: `${e.from} -> ${e.to} "${e.label}"`, x: lx - tw / 2, y: ly - 10, w: tw, h: 20 });
+  }
+  const hit = (p, q) => p.x < q.x + q.w && p.x + p.w > q.x && p.y < q.y + q.h && p.y + p.h > q.y;
+  const out = [];
+  for (const bx of boxes) for (const n of t.nodes) { const p = pos(n); if (hit(bx, { x: p.x, y: p.y, w: NW, h: NH })) out.push(`edge label ${bx.name} covers node ${n.id}, shorten it or move a node`); }
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (hit(boxes[i], boxes[j])) out.push(`edge labels ${boxes[i].name} and ${boxes[j].name} overlap, drop or shorten one, or move a node`);
+  return out;
 }
 
 function check(file) {
@@ -109,6 +146,7 @@ function check(file) {
       if (Math.abs(zoneIdx[a.zone] - zoneIdx[b.zone]) > 1) long++;
     }
     if (long > LIMITS.longEdges) warn(`${where}: ${long} edges skip a zone, reorder zones or rows to keep it to ${LIMITS.longEdges} or fewer`);
+    if (!errors.length) for (const m of labelCollisions(t, zoneIdx)) err(`${where}: ${m}`);
 
     for (const m of t.moves ?? []) for (const k of ["what", "why", "driver", "trigger"]) if (!m[k]) err(`${where}: move "${m.what ?? "?"}" missing ${k}`);
     for (const r of t.rejected ?? []) if (!r.what || !r.why) err(`${where}: each rejected item needs what and why`);
