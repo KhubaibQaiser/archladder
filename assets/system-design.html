@@ -128,7 +128,7 @@ svg.wires { position: absolute; inset: 0; overflow: visible; pointer-events: non
 .prof { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere }
 .prof .v { font: 600 14.5px/1.3 var(--font-body) }
 .prof .d { font-size: 13px; color: var(--ink-2) }
-.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; border: 1px solid currentColor }
+.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px/1.45 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; border: 1px solid currentColor; max-width: 100% }
 .src.repo { color: var(--z-edge-ink) } .src.brief { color: var(--z-client-ink) } .src.user { color: var(--new) } .src.inferred { color: var(--changed) } .src.unknown { color: var(--removed) }
 .driver { font-size: 13px }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0 }
@@ -213,7 +213,7 @@ dialog::backdrop { background: rgba(8, 12, 18, .5) }
    status: new | changed | same | removed. icon: a key of ICONS below. */
 const DESIGN = {
   /* Skeleton only. Replace every value with this project's real stack, requirements and numbers.
-     Field reference: references/design-schema.md. A filled example: examples/caseflow/index.html.
+     Field reference: references/design-schema.md. Filled examples live in the examples folder.
      Use the five default tiers (x1 to x10000); two are shown here to keep the skeleton short. */
   title: "Project System Design",
   stack: "<framework> on <host> · <database>",
@@ -400,7 +400,7 @@ const DESIGN = {
       const cls = 'wire ' + (e.async ? "async" : "sync");
       wires += '<path class="' + cls + '" data-a="' + e.from + '" data-b="' + e.to + '" d="' + w.d + '" marker-end="url(#ah)"/>';
       if (e.label) {
-        const txt = e.label.length > 14 ? e.label.slice(0, 13) + "…" : e.label;
+        const txt = e.label.length > 10 ? e.label.slice(0, 9) + "…" : e.label;
         const tw = txt.length * 6.4 + 14, lx = w.inset ? w.mx + 4 + tw / 2 : w.side ? w.mx + 8 + tw / 2 : w.mx;
         labels += '<g class="wire-label" data-a="' + e.from + '" data-b="' + e.to + '"><rect x="' + (lx - tw / 2) + '" y="' + (w.my - 10) + '" width="' + tw + '" height="20" rx="10"/><text x="' + lx + '" y="' + (w.my + 3.8) + '" text-anchor="middle">' + esc(txt) + '</text><title>' + esc(e.label) + '</title></g>';
       }

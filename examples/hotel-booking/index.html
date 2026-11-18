@@ -1,0 +1,2953 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hotel Booking System Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: problem header and requirements, tier switcher, zoned architecture canvas, then moves, rejections and load. */
+:root {
+  --bg: #eef1f6; --surface: #ffffff; --surface-2: #f6f8fb; --ink: #141b26; --ink-2: #4d5868; --line: #d3d9e3;
+  --accent: #3157d5; --accent-ink: #ffffff; --wire: #8a95a7;
+  --new: #0d7a4e; --changed: #b35c00; --removed: #a3324a;
+  --z-client: #e4ebff; --z-client-ink: #2f4fb8;
+  --z-edge: #e2f2f7; --z-edge-ink: #106579;
+  --z-app: #e6f4ea; --z-app-ink: #1f6b3a;
+  --z-data: #fdeedc; --z-data-ink: #8a4a06;
+  --z-services: #f1e8fb; --z-services-ink: #6a3aa8;
+  --lane: rgba(20, 27, 38, .035);
+  --shadow: 0 1px 2px rgba(20, 27, 38, .06), 0 4px 14px rgba(20, 27, 38, .06);
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px }
+.wrap { max-width: 1440px; margin: 0 auto; display: grid; gap: 22px }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.15 }
+h1 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 700; letter-spacing: -.01em }
+h2 { font-size: 18px } h3 { font-size: 20px }
+p { margin: 0 }
+.muted { color: var(--ink-2) }
+.eyebrow { font: 600 11px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+button { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+header { display: grid; gap: 10px }
+.ai-warn { border: 1px solid var(--changed); background: color-mix(in srgb, var(--changed) 9%, var(--surface)); border-radius: 12px; padding: 12px 16px; font-size: 14px; max-width: 100%; overflow-wrap: anywhere }
+.ai-warn strong { color: var(--changed) }
+.alts { display: grid; gap: 8px }
+.alts div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--line) }
+.alts span { color: var(--ink-2); font-size: 14px }
+.reqs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px }
+.req { display: inline-flex; gap: 8px; align-items: baseline; min-width: 0; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 13px; max-width: 100% }
+.req b { font: 600 11px var(--font-mono); color: var(--accent); white-space: nowrap; flex: none }
+
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between }
+.tabs { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 5px; flex-wrap: wrap }
+.tab { border: 0; background: transparent; border-radius: 8px; padding: 8px 14px; cursor: pointer; display: grid; gap: 1px; text-align: left; min-height: 44px }
+.tab .t { font: 700 16px var(--font-display) }
+.tab .l { font: 11px var(--font-mono); color: var(--ink-2) }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink) }
+.tab[aria-selected="true"] .l { color: inherit; opacity: .85 }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; min-height: 32px }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent) }
+
+.tier-head { display: grid; gap: 4px }
+.tier-head p { max-width: 85ch }
+
+.canvas-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow-x: auto; box-shadow: var(--shadow) }
+.canvas-fit { position: relative; margin: 0 auto }
+.canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0 }
+.lane { position: absolute; top: 12px; bottom: 12px; border-radius: 12px; background: var(--lane) }
+.lane-head { position: absolute; top: 22px; display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.lane-head i { width: 8px; height: 8px; border-radius: 50% }
+svg.wires { position: absolute; inset: 0; overflow: visible; pointer-events: none }
+.wire { fill: none; stroke: var(--wire); stroke-width: 1.6; transition: opacity .15s, stroke .15s }
+.wire.sync { stroke-dasharray: 7 5 }
+.wire.async { stroke-dasharray: 2 6; stroke-linecap: round; stroke-width: 2.2 }
+.wire-label rect { fill: var(--surface); stroke: var(--line) }
+.wire-label text { fill: var(--ink-2); font: 500 10.5px var(--font-mono) }
+@media (prefers-reduced-motion: no-preference) {
+  .wire.sync { animation: flow 1.4s linear infinite }
+  .wire.async { animation: flow 2.2s linear infinite }
+  @keyframes flow { to { stroke-dashoffset: -24 } }
+}
+
+.node { position: absolute; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; box-shadow: var(--shadow);
+  transition: transform .15s, opacity .15s, border-color .15s }
+.node:hover { border-color: var(--accent); transform: translateY(-2px) }
+.node .ic { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center }
+.node .ic svg { width: 24px; height: 24px }
+.node .nm { font: 600 14px/1.25 var(--font-body); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere }
+.node .tc { font: 11px/1.35 var(--font-mono); color: var(--ink-2); margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.node .st { z-index: 1; position: absolute; top: -9px; right: 10px; font: 700 9.5px var(--font-mono); letter-spacing: .08em; padding: 3px 7px; border-radius: 99px; color: var(--surface) }
+.node.new { border-color: var(--new); box-shadow: 0 0 0 3px color-mix(in srgb, var(--new) 22%, transparent), var(--shadow) }
+.node.new .st { background: var(--new) }
+.node.changed { border-color: var(--changed) }
+.node.changed .st { background: var(--changed) }
+.node.removed { border-style: dashed; opacity: .6 }
+.node.removed .st { background: var(--removed) }
+.node.removed .nm { text-decoration: line-through }
+.canvas.hovering .node:not(.hot), .canvas.only-changes:not(.baseline) .node.same { opacity: .32 }
+.canvas.hovering .wire:not(.hot), .canvas.hovering .wire-label:not(.hot) { opacity: .15 }
+.canvas.hovering .wire.hot { stroke: var(--accent) }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 20px; font-size: 12.5px; color: var(--ink-2); padding: 0 4px }
+.legend span { display: inline-flex; align-items: center; gap: 8px }
+.legend svg { width: 34px; height: 8px }
+
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 18px }
+.card.wide { grid-column: 1 / -1 }
+.card li, .card p, .m-body, .m-head h3 { overflow-wrap: anywhere }
+.profile { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px }
+.prof { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere }
+.prof .v { font: 600 14.5px/1.3 var(--font-body) }
+.prof .d { font-size: 13px; color: var(--ink-2) }
+.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px/1.45 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; border: 1px solid currentColor; max-width: 100% }
+.src.repo { color: var(--z-edge-ink) } .src.brief { color: var(--z-client-ink) } .src.user { color: var(--new) } .src.inferred { color: var(--changed) } .src.unknown { color: var(--removed) }
+.driver { font-size: 13px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0 }
+.moves, .rejected { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px }
+.moves li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--changed) }
+.rejected li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--line) }
+.trigger { font: 12px var(--font-mono); color: var(--ink-2) }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2) }
+td.num { font: 13px var(--font-mono); font-variant-numeric: tabular-nums }
+td.cur { color: var(--accent); font-weight: 600 }
+.tablewrap { overflow-x: auto }
+
+dialog { border: 1px solid var(--line); border-radius: 18px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(0, 0, 0, .28) }
+dialog::backdrop { background: rgba(8, 12, 18, .5) }
+.m-head { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 20px 20px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface) }
+.m-head .ic { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center }
+.m-head .ic svg { width: 30px; height: 30px }
+.m-tech { font: 12px var(--font-mono); color: var(--ink-2); margin-top: 4px }
+.close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; display: grid; place-items: center }
+.close svg { width: 18px; height: 18px }
+.m-body { padding: 18px 20px 22px; display: grid; gap: 18px }
+.pills { display: flex; flex-wrap: wrap; gap: 8px }
+.pill { font: 600 11px var(--font-mono); letter-spacing: .06em; padding: 3px 9px; border-radius: 99px; border: 1px solid currentColor }
+.pill.new { color: var(--new) } .pill.changed { color: var(--changed) } .pill.same { color: var(--ink-2) } .pill.removed { color: var(--removed) }
+.sec { display: grid; gap: 6px }
+.sec h4 { margin: 0; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.sec ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.serves { display: grid; gap: 6px }
+.serves div { background: var(--surface-2); border-radius: 8px; padding: 7px 10px; font-size: 14px }
+.serves b { font: 600 11px var(--font-mono); color: var(--accent); margin-right: 8px; white-space: nowrap }
+.fail { display: grid; gap: 8px }
+.fail div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--removed) }
+.fail span { color: var(--ink-2); font-size: 14px }
+.next { background: var(--surface-2); border-radius: 10px; padding: 12px; display: grid; gap: 4px }
+.conns { display: flex; flex-wrap: wrap; gap: 8px }
+.conn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer; min-height: 32px }
+.conn:hover { border-color: var(--accent) }
+</style>
+
+<div class="wrap">
+  <aside class="ai-warn" role="note"><strong>AI-generated suggestion.</strong> This design was drafted by an AI agent from the project context and the answers it was given. Numbers, costs and vendor limits are estimates. Treat it as a starting point for discussion: verify every choice against current vendor docs and your own measurements before acting on it.</aside>
+  <header>
+    <div class="eyebrow">System design · <span id="stack"></span></div>
+    <h1 id="title"></h1>
+    <p class="muted" id="problem" style="max-width:80ch"></p>
+    <div class="reqs" id="reqs"></div>
+  </header>
+
+  <section style="display:grid;gap:10px" aria-labelledby="prof-h">
+    <h2 id="prof-h">Workload profile <span class="muted" style="font:400 13px var(--font-body)">what drives the design at every tier</span></h2>
+    <div class="profile" id="profile"></div>
+  </section>
+
+  <div class="bar">
+    <div class="tabs" role="tablist" aria-label="Traffic tier" id="tabs"></div>
+    <label class="toggle"><input type="checkbox" id="only" checked> Highlight what changed</label>
+  </div>
+
+  <section class="tier-head" aria-live="polite">
+    <h2 id="tier-title" style="font-size:22px"></h2>
+    <p class="muted" id="tier-summary"></p>
+  </section>
+
+  <div class="canvas-wrap" id="cwrap"><div class="canvas-fit" id="cfit"><div class="canvas only-changes" id="canvas"></div></div></div>
+  <div class="legend" id="legend"></div>
+
+  <div class="grid3">
+    <section class="card"><h2>Recommended moves</h2><ul class="moves" id="moves"></ul></section>
+    <section class="card"><h2>Considered and left out</h2><ul class="rejected" id="rejected"></ul></section>
+    <section class="card wide"><h2>Load assumptions</h2><p class="muted" id="load-note" style="font-size:13.5px"></p><div class="tablewrap"><table id="load"></table></div></section>
+  </div>
+</div>
+
+<dialog id="modal" aria-labelledby="m-name"></dialog>
+
+<script>
+/* Replace only this object for a new design. Every node must name the requirements it serves.
+   zone: one of DESIGN.zones ids (the column). row: 0-based row inside the zone.
+   status: new | changed | same | removed. icon: a key of ICONS below. */
+const DESIGN = {
+  "title": "Hotel Booking System Design",
+  "stack": "Java (Spring Boot) on Google Cloud Run · Cloud SQL for Postgres",
+  "problem": "A hotel booking marketplace. Travellers search hotels by city, dates and guests, filter by price, rating and amenities, and book a room with instant confirmation. Hotels manage rooms, rates and availability in an extranet, and many sync through channel managers that push updates many times an hour. The marketplace earns a commission per stay. Search is read-heavy at about 200 searches per booking, the last room must never be double-booked, and search may lag availability by up to a minute.",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "Search by city, dates and guests, filter by price, rating and amenities"
+    },
+    {
+      "id": "R2",
+      "text": "Book a room with instant confirmation and never double-book the last room"
+    },
+    {
+      "id": "R3",
+      "text": "Hotels manage rooms, rates and availability in an extranet"
+    },
+    {
+      "id": "R4",
+      "text": "Channel managers push about 50 rate or availability updates per hotel per day"
+    },
+    {
+      "id": "R5",
+      "text": "Search may lag availability by up to 1 minute. Booking re-checks live availability"
+    },
+    {
+      "id": "R6",
+      "text": "Payments in local currencies"
+    },
+    {
+      "id": "R7",
+      "text": "Commission per stay, GDPR the only data rule"
+    },
+    {
+      "id": "R8",
+      "text": "Works for global travellers from 10k DAU, up to 10M DAU"
+    }
+  ],
+  "profile": [
+    {
+      "label": "Read to write",
+      "value": "Very read-heavy: 15 searches and 60 detail views per user per day, search to booking about 200:1",
+      "source": "user",
+      "drives": "Caches, a read replica and a search index carry the read side. The primary stays a booking and supply writer."
+    },
+    {
+      "label": "Supply writes",
+      "value": "About 50 rate or availability updates per hotel per day, from channel managers",
+      "source": "user",
+      "drives": "Write volume grows with hotel count, not traveller count. Needs idempotent overwrites, batching and a path off the booking pool."
+    },
+    {
+      "label": "Connection model",
+      "value": "Request and response. No real-time for travellers, extranet refreshes on load",
+      "source": "user",
+      "drives": "No websocket gateway or backplane at any tier. Polling and SSE are not needed."
+    },
+    {
+      "label": "Freshness",
+      "value": "Search may lag availability by up to a minute. Booking re-checks live",
+      "source": "user",
+      "drives": "Allows replicas, a search index, 60 s caches and asynchronous indexing. The live check stays on the writer."
+    },
+    {
+      "label": "Consistency",
+      "value": "Strong for inventory: never double-book the last room",
+      "source": "user",
+      "drives": "One transactional decrement in the database at every tier. Idempotency keys on bookings."
+    },
+    {
+      "label": "Tenancy",
+      "value": "Marketplace: hotels are suppliers, from 10 to 2,000 rooms. 2k hotels at 1k DAU, 500k at 10M",
+      "source": "user",
+      "drives": "hotel_id is the partition and shard key. Hotel count sets supply write volume."
+    },
+    {
+      "label": "Key skew",
+      "value": "A few chains are very large. Hot cities and hot hotels in campaigns",
+      "source": "user",
+      "drives": "City-aware shards in search, per-hotel limits and admission control. Chain size alone is not a shard key."
+    },
+    {
+      "label": "Traffic shape",
+      "value": "Daily cycle about 3x, plus flash sales and holiday campaigns at 20x search for a few hours, announced a week ahead",
+      "source": "user",
+      "drives": "Pre-scaling from a calendar, caches for the spike, headroom sized on spike not average. Spike assumed to stack on the daily peak."
+    },
+    {
+      "label": "Spike stacking and spread",
+      "value": "Campaign 20x applies to the daily peak and detail views follow search, bookings at the same conversion",
+      "source": "inferred",
+      "drives": "Sets the spike rows in the load table. If the 20x is on the average, spike rates fall by 3x."
+    },
+    {
+      "label": "Latency and availability",
+      "value": "Search p95 under 500 ms, booking p95 under 2 s. Availability from 99.5% at 1k to 99.99% at 10M",
+      "source": "inferred",
+      "drives": "Decides when replicas, regions and a different primary store are needed. Targets flip tier timing if the product owner sets different ones."
+    },
+    {
+      "label": "Geography",
+      "value": "Global travellers from 10k DAU, payments in local currencies",
+      "source": "user",
+      "drives": "CDN from 10k, regional read stacks only at 10M. Local-currency capable payment provider from day one."
+    },
+    {
+      "label": "Regional split",
+      "value": "Even across 3 regions at 10M DAU",
+      "source": "inferred",
+      "drives": "Sizes each regional stack at about a third of the campaign load. Skewed splits mean larger regions."
+    },
+    {
+      "label": "Data rules",
+      "value": "GDPR only. No other residency rules",
+      "source": "user",
+      "drives": "No residency-driven regions. Traveller PII separated for deletion and export."
+    },
+    {
+      "label": "Data growth",
+      "value": "Per hotel about 5 room types x 365 forward nights, about 10 nights touched per push, one booking per 200 searches",
+      "source": "inferred",
+      "drives": "Room-night rows and write rate in the load table. Partitioning at 1M, change in store at 10M."
+    },
+    {
+      "label": "Background work",
+      "value": "Channel pushes, index feed and payment sweeps. No heavy jobs named",
+      "source": "inferred",
+      "drives": "Pub/Sub and workers arrive when the index needs feeding at 100k."
+    },
+    {
+      "label": "Team, stack and cost",
+      "value": "Team of 20. Java Spring Boot on Google Cloud, Cloud SQL for Postgres, web and mobile apps",
+      "source": "user",
+      "drives": "Stay on managed Google Cloud services until a tier's numbers exceed them. Leaving one is a decision."
+    }
+  ],
+  "zones": [
+    {
+      "id": "client",
+      "label": "Clients"
+    },
+    {
+      "id": "edge",
+      "label": "Edge"
+    },
+    {
+      "id": "app",
+      "label": "Application"
+    },
+    {
+      "id": "data",
+      "label": "Data"
+    },
+    {
+      "id": "services",
+      "label": "Platform services"
+    }
+  ],
+  "load": {
+    "note": "Per user per day: 15 searches, 60 detail views, 0.075 bookings (200:1). Avg = DAU x n / 86,400. Daily peak 3x avg. Campaign spike 20x the daily peak on searches and detail views, bookings at the same conversion (inferred). Hotels: 2k at 1k DAU and 500k at 10M (user), 10k, 50k and 200k between (inferred). 50 pushes per hotel per day at 3x peak, about 10 room-nights per push. 5 room types x 365 nights per hotel. 3 regions at 10M (inferred). Costs are estimates from rough list prices, unverified.",
+    "rows": [
+      "Searches per s: daily peak / spike",
+      "Detail views per s: peak / spike",
+      "Bookings per s: peak / spike",
+      "Hotels",
+      "Channel pushes per s (peak)",
+      "Room-night row writes per s",
+      "Room-night rows",
+      "Bookings stored per year",
+      "Regions",
+      "Availability target (inferred)"
+    ],
+    "values": {
+      "x1": [
+        "0.5 / 10",
+        "2.1 / 42",
+        "0.003 / 0.05",
+        "2k",
+        "3.5",
+        "35",
+        "3.7M",
+        "27k",
+        "1",
+        "99.5%"
+      ],
+      "x10": [
+        "5 / 104",
+        "21 / 417",
+        "0.03 / 0.5",
+        "10k",
+        "17",
+        "174",
+        "18M",
+        "274k",
+        "1 + CDN",
+        "99.9%"
+      ],
+      "x100": [
+        "52 / 1.0k",
+        "208 / 4.2k",
+        "0.26 / 5",
+        "50k",
+        "87",
+        "868",
+        "91M",
+        "2.7M",
+        "1 + CDN",
+        "99.9%"
+      ],
+      "x1000": [
+        "520 / 10.4k",
+        "2.1k / 42k",
+        "2.6 / 52",
+        "200k",
+        "347",
+        "3.5k",
+        "365M",
+        "27M",
+        "1 + CDN",
+        "99.95%"
+      ],
+      "x10000": [
+        "5.2k / 104k",
+        "21k / 417k",
+        "26 / 520",
+        "500k",
+        "868",
+        "8.7k",
+        "0.9B",
+        "274M",
+        "3",
+        "99.99%"
+      ]
+    }
+  },
+  "tiers": [
+    {
+      "id": "x1",
+      "label": "1x",
+      "short": "1k DAU",
+      "title": "1k DAU: one modular service on one Postgres",
+      "summary": "A single Spring Boot service on Cloud Run and one HA Cloud SQL Postgres carry search, booking and the extranet. At about 0.5 searches per second at peak and 75 bookings a day, the only part that needs care is not double-booking the last room, and that is one transactional statement in the database.",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "Web and mobile apps",
+          "tech": "Web app + mobile apps, HTTPS JSON",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Mobile web only",
+              "why": "The brief names mobile apps, and search must stay fast on phones."
+            },
+            {
+              "what": "GraphQL gateway for clients",
+              "why": "Two clients and one backend do not need a schema layer. Plain REST keeps search responses cacheable at the CDN."
+            }
+          ],
+          "role": "Search, filter, hotel detail and the booking flow. Sends an idempotency key with every booking attempt.",
+          "specifics": [
+            "Search state (city, dates, guests, filters) lives in the URL so results are shareable",
+            "Booking button disabled while pending; same idempotency key on retry of the same intent",
+            "Prices shown in the traveller's currency, charged in the currency the payment provider supports for that card"
+          ],
+          "tradeoffs": [
+            "Two client codebases to keep in step on the booking flow"
+          ],
+          "failures": [
+            {
+              "mode": "Network drop mid-booking",
+              "mitigation": "Retry with the same idempotency key, server returns the original result"
+            }
+          ],
+          "breaks": "Nothing at this tier.",
+          "trigger": "",
+          "cost": "Client cost only"
+        },
+        {
+          "id": "extranet",
+          "label": "Extranet + channel mgrs",
+          "tech": "Hotel web UI, channel push API",
+          "icon": "user",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "alternatives": [
+            {
+              "what": "Pull rates from channel managers on a schedule",
+              "why": "Channel managers already push many times an hour. Polling duplicates the work and adds lag."
+            },
+            {
+              "what": "CSV upload only",
+              "why": "Cannot carry about 50 rate and availability updates per hotel per day."
+            }
+          ],
+          "role": "Hotels edit rooms, rates and availability. Channel managers push the same data through the API. The extranet refreshes on load, with no live push.",
+          "specifics": [
+            "Updates are overwrites keyed by hotel, room type and night, so a replay is a no-op",
+            "Each hotel gets its own API credential and per-hotel rate limit"
+          ],
+          "tradeoffs": [
+            "No live view: a hotel sees another editor's change only on refresh (brief)"
+          ],
+          "failures": [
+            {
+              "mode": "Channel manager retries a push",
+              "mitigation": "Idempotent overwrite by (room type, night, version)"
+            }
+          ],
+          "breaks": "Push volume grows with hotel count, not traveller count.",
+          "trigger": "",
+          "cost": "Client cost only"
+        },
+        {
+          "id": "lb",
+          "label": "Load balancer + CDN",
+          "tech": "Global ALB, Cloud CDN, Cloud Armor",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Cloud Run default URL only",
+              "why": "No CDN, no WAF and no rate limits for flash-sale bursts."
+            },
+            {
+              "what": "Self-run NGINX or Envoy on VMs",
+              "why": "Ops burden for a team of 20 with no gain over the managed balancer."
+            }
+          ],
+          "role": "Terminates TLS, routes to Cloud Run, serves static assets from the CDN and applies basic Armor rules.",
+          "specifics": [
+            "HTTPS only, HTTP/2",
+            "Static assets cached with long TTL and hashed file names",
+            "Dynamic responses are not cached at this tier"
+          ],
+          "tradeoffs": [
+            "Adds a small fixed monthly cost over the default Cloud Run URL"
+          ],
+          "failures": [
+            {
+              "mode": "Bad Armor rule blocks real traffic",
+              "mitigation": "Rules start in preview mode and ship through review"
+            }
+          ],
+          "breaks": "Search responses are uncached, so a campaign hits the app directly.",
+          "trigger": "",
+          "cost": "~$25/mo est. (one forwarding rule ~$18, low traffic, unverified list price)"
+        },
+        {
+          "id": "auth",
+          "label": "Identity Platform",
+          "tech": "OIDC, traveller + hotel-staff tenants",
+          "icon": "key",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R3"
+          ],
+          "alternatives": [
+            {
+              "what": "Spring Security with our own user table",
+              "why": "We would own password storage, MFA and GDPR deletion for travellers and hotel staff."
+            },
+            {
+              "what": "Keycloak on GKE",
+              "why": "One more stateful system to patch and run."
+            }
+          ],
+          "role": "Signs travellers and hotel staff in. The app verifies the signed token locally against published keys, so a sign-in outage does not stop search.",
+          "specifics": [
+            "Separate tenants for travellers and hotel staff",
+            "Search and hotel detail work signed out; booking needs a signed-in or guest-verified user (assumption, inferred)",
+            "Hotel staff scoped to their own hotel ids in token claims"
+          ],
+          "tradeoffs": [
+            "Vendor-specific token claims make a later move a migration"
+          ],
+          "failures": [
+            {
+              "mode": "Identity outage",
+              "mitigation": "Signed-out search and detail keep working. Existing sessions work until token expiry."
+            }
+          ],
+          "breaks": "Nothing at this tier.",
+          "trigger": "",
+          "cost": "~$0 est. (free monthly active user tier at 1k DAU, unverified)"
+        },
+        {
+          "id": "app",
+          "label": "Spring Boot service",
+          "tech": "Cloud Run, 2 vCPU, min 2 instances",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6",
+            "R7"
+          ],
+          "alternatives": [
+            {
+              "what": "Microservices from day one",
+              "why": "20 engineers and 1k DAU: the split costs more than it saves. Keep module boundaries (search, booking, supply) inside one deployable."
+            },
+            {
+              "what": "GKE",
+              "why": "Cluster operations with no gain over Cloud Run at this load."
+            },
+            {
+              "what": "Compute Engine VMs",
+              "why": "Manual scaling and patching."
+            }
+          ],
+          "role": "One modular Spring Boot service: search, hotel detail, booking, extranet and channel push endpoints. Booking decrements inventory and writes the booking in one transaction, then captures payment.",
+          "specifics": [
+            "Booking: UPDATE room_night SET sold = sold + 1 WHERE room_type_id = ? AND night in stay AND sold < allotment; booking only if every night updated, all in one transaction",
+            "Unique idempotency key on bookings",
+            "Hold, charge, confirm: card authorised first, captured after the commit; a failed commit voids the authorisation",
+            "Commission computed and stored on the booking row at confirmation",
+            "Booking step re-checks availability live on the primary"
+          ],
+          "tradeoffs": [
+            "One deploy unit for supply, search and booking: a bad release hits all three"
+          ],
+          "failures": [
+            {
+              "mode": "Commit fails after card authorisation",
+              "mitigation": "Void the authorisation. A sweeper job voids any authorisation with no booking after 15 minutes."
+            }
+          ],
+          "breaks": "Search and booking share one Cloud SQL primary and one connection pool.",
+          "trigger": "Primary CPU above 70% or pool wait above 50 ms",
+          "cost": "~$100/mo est. (2 vCPU x 2 always-on instances at about $0.000024 per vCPU-s, unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Cloud SQL Postgres",
+          "tech": "HA, room-night inventory, PITR",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R7"
+          ],
+          "alternatives": [
+            {
+              "what": "Cloud Spanner",
+              "why": "Global scale is not needed at 1k DAU, it costs more and the dialect differences cost the team time."
+            },
+            {
+              "what": "AlloyDB",
+              "why": "More throughput than any workload here needs yet, at a higher price."
+            },
+            {
+              "what": "Firestore",
+              "why": "Weak fit for relational filters and an atomic multi-night decrement."
+            }
+          ],
+          "role": "Source of truth for hotels, room types, room-night inventory, rates and bookings. Constraints and the single decrement statement protect the last room.",
+          "specifics": [
+            "room_night(room_type_id, night, allotment, sold, rate), check sold <= allotment",
+            "Indexes: (city_id, night) for search, (hotel_id) for extranet, unique idempotency key on bookings",
+            "High availability on, point-in-time recovery on",
+            "Backups and encrypted at rest; traveller PII separated for GDPR deletion"
+          ],
+          "tradeoffs": [
+            "Single writer: a failover pauses bookings for a minute or two"
+          ],
+          "failures": [
+            {
+              "mode": "Failover",
+              "mitigation": "HA standby takes over. In-flight bookings retry with their idempotency key."
+            }
+          ],
+          "breaks": "Spike search and detail reads compete with bookings on the one instance.",
+          "trigger": "CPU above 70% sustained, or search p95 above 500 ms in a campaign",
+          "cost": "~$200/mo est. (2 vCPU, 8 GB HA at about 2 x $100, unverified)"
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Hosted fields, local currencies, 3DS",
+          "icon": "lock",
+          "zone": "services",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R6",
+            "R7"
+          ],
+          "alternatives": [
+            {
+              "what": "Card form on our own pages",
+              "why": "Brings full PCI scope onto a 20-person team."
+            },
+            {
+              "what": "One provider per country",
+              "why": "More integrations. Local-currency payments is a requirement, not a nice-to-have."
+            }
+          ],
+          "role": "Authorises and captures cards in the traveller's local currency, off our servers. Card data never reaches Spring Boot.",
+          "specifics": [
+            "Authorise first, capture after the booking commits",
+            "Provider idempotency key = booking idempotency key",
+            "Webhook for async outcomes, processed idempotently"
+          ],
+          "tradeoffs": [
+            "Per-transaction fee comes out of commission margin"
+          ],
+          "failures": [
+            {
+              "mode": "Provider timeout",
+              "mitigation": "Booking stays pending, a sweeper queries the provider and either confirms or voids"
+            }
+          ],
+          "breaks": "Nothing at this tier.",
+          "trigger": "",
+          "cost": "Per transaction, not infrastructure"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "lb",
+          "label": "HTTPS"
+        },
+        {
+          "from": "extranet",
+          "to": "lb"
+        },
+        {
+          "from": "web",
+          "to": "auth",
+          "label": "sign-in"
+        },
+        {
+          "from": "lb",
+          "to": "app"
+        },
+        {
+          "from": "app",
+          "to": "db",
+          "label": "SQL"
+        },
+        {
+          "from": "app",
+          "to": "psp",
+          "label": "charge"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Baseline: modular monolith, one primary, strong inventory decrement",
+          "why": "The smallest system that meets R1 to R8. Never double-booking is a database invariant, not app logic, so it holds at every later tier.",
+          "driver": "Writes that matter: bookings must never double-book. Reads about 75 per user per day, 2.6 per second at peak",
+          "trigger": "n/a"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Microservices",
+          "why": "A team of 20 serving 0.5 searches per second gains nothing from network hops between search, booking and supply."
+        },
+        {
+          "what": "Search engine or Redis cache",
+          "why": "A (city, night) index on 3.7M room-night rows answers search well inside budget at this load."
+        },
+        {
+          "what": "Queue for channel pushes",
+          "why": "3.5 pushes per second at peak is about 35 row writes per second. Direct writes are fine."
+        },
+        {
+          "what": "WebSockets or SSE for the extranet",
+          "why": "The brief says the extranet refreshes on load. No real-time need for travellers either."
+        },
+        {
+          "what": "GKE instead of Cloud Run",
+          "why": "Cluster operations with no benefit before the load needs fine-grained control."
+        }
+      ]
+    },
+    {
+      "id": "x10",
+      "label": "10x",
+      "short": "10k DAU",
+      "title": "10k DAU: replica for reads, CDN for images, pre-scaled campaigns",
+      "summary": "Travellers are now global, and a flash sale hits 104 searches per second on a 2 vCPU primary. A read replica takes search and detail reads, which is safe because search may lag availability by a minute. A media origin behind the CDN serves photos worldwide. Campaigns are announced a week ahead, so Cloud Run is pre-scaled rather than reacting.",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "Web and mobile apps",
+          "tech": "Web app + mobile apps, HTTPS JSON",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "extranet",
+          "label": "Extranet + channel mgrs",
+          "tech": "Hotel web UI, channel push API",
+          "icon": "user",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "lb",
+          "label": "Load balancer + CDN",
+          "tech": "Global ALB, CDN for media, Armor",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Same balancer, plus CDN caching of hotel media from the bucket origin.",
+          "specifics": [
+            "Media cached with immutable names",
+            "Armor rate limit per IP for anonymous search"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Search responses remain uncached.",
+          "trigger": "",
+          "cost": "~$50/mo est. (unverified)"
+        },
+        {
+          "id": "auth",
+          "label": "Identity Platform",
+          "tech": "OIDC, traveller + hotel-staff tenants",
+          "icon": "key",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R3"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "images",
+          "label": "Media origin",
+          "tech": "Cloud Storage bucket behind Cloud CDN",
+          "icon": "storage",
+          "zone": "edge",
+          "row": 2,
+          "status": "new",
+          "serves": [
+            "R1",
+            "R3",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Images in Postgres or on the Cloud Run container",
+              "why": "Not cacheable at the edge and bloats the database."
+            },
+            {
+              "what": "Third-party image host",
+              "why": "Another vendor with no benefit over the storage already in the platform."
+            }
+          ],
+          "role": "Stores hotel photos uploaded from the extranet. Travellers fetch them from the CDN edge nearest to them.",
+          "specifics": [
+            "Signed upload URLs from the app, size and type checked",
+            "Immutable object names, long cache TTL",
+            "Multiple sized variants so search cards load small images"
+          ],
+          "tradeoffs": [
+            "Resize pipeline to build and own"
+          ],
+          "failures": [
+            {
+              "mode": "Bad upload",
+              "mitigation": "Reject by type and size, scan before publishing (assumption, inferred)"
+            }
+          ],
+          "breaks": "Nothing in the measured range.",
+          "trigger": "",
+          "cost": "~$30/mo est. (storage plus egress, unverified)"
+        },
+        {
+          "id": "app",
+          "label": "Spring Boot service",
+          "tech": "Cloud Run, scheduled min instances",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6",
+            "R7"
+          ],
+          "role": "Routes search and detail reads to the replica. Bookings, pushes and the live re-check stay on the primary. Minimum instances are raised ahead of announced campaigns.",
+          "specifics": [
+            "Two datasources: primary (writes, booking re-check) and replica (search, detail)",
+            "Campaign calendar sets min instances 30 minutes before start, from a Cloud Scheduler job",
+            "Connection pool capped per instance, total below the database limit"
+          ],
+          "tradeoffs": [
+            "Calendar must be kept current or the pre-scale is missed"
+          ],
+          "failures": [
+            {
+              "mode": "Campaign not on the calendar",
+              "mitigation": "Autoscaling still reacts. Alert when instance count doubles within 5 minutes."
+            }
+          ],
+          "breaks": "Still one deployable for search, booking and supply.",
+          "trigger": "Search CPU forces scale that also grows connection use",
+          "cost": "~$200/mo est. (unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Cloud SQL Postgres",
+          "tech": "HA primary, 4 vCPU, replication on",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R7"
+          ],
+          "role": "Writer for bookings, channel pushes and the live availability check. Replicates to the read replica.",
+          "specifics": [
+            "4 vCPU 16 GB",
+            "Replication slot monitored"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Search on 18M room-night rows is heavy even for a replica.",
+          "trigger": "Primary CPU above 70% during a campaign",
+          "cost": "~$400/mo est. (4 vCPU, 16 GB HA at about 2 x $200, unverified)"
+        },
+        {
+          "id": "replica",
+          "label": "Read replica",
+          "tech": "Cloud SQL replica, search + detail reads",
+          "icon": "database",
+          "zone": "data",
+          "row": 1,
+          "status": "new",
+          "serves": [
+            "R1",
+            "R5"
+          ],
+          "alternatives": [
+            {
+              "what": "Memorystore cache in front of the primary",
+              "why": "Search keys vary by city, dates and filters, so hit rate is low and invalidation adds risk. Revisit at 1M."
+            },
+            {
+              "what": "A bigger primary",
+              "why": "Mixes campaign read load with bookings on the one writer."
+            }
+          ],
+          "role": "Serves search and hotel detail reads. Bookings, pushes and the live re-check stay on the primary.",
+          "specifics": [
+            "Replication lag budget 30 s, alert at 45 s, inside the 1 minute freshness allowance",
+            "Booking never reads availability from the replica"
+          ],
+          "tradeoffs": [
+            "A traveller can see a room the replica thinks is free but is gone. The live re-check catches it at booking."
+          ],
+          "failures": [
+            {
+              "mode": "Replica lag grows",
+              "mitigation": "Alert, route search to the primary for a short time, shed load at the balancer if it persists"
+            }
+          ],
+          "breaks": "Faceted search over 91M room-night rows outgrows what a replica does cheaply.",
+          "trigger": "Replica CPU above 70% or lag above 45 s",
+          "cost": "~$200/mo est. (same size as the primary, unverified)"
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Hosted fields, local currencies, 3DS",
+          "icon": "lock",
+          "zone": "services",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R6",
+            "R7"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "lb",
+          "label": "HTTPS"
+        },
+        {
+          "from": "extranet",
+          "to": "lb"
+        },
+        {
+          "from": "web",
+          "to": "auth",
+          "label": "sign-in"
+        },
+        {
+          "from": "lb",
+          "to": "app"
+        },
+        {
+          "from": "lb",
+          "to": "images"
+        },
+        {
+          "from": "app",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "app",
+          "to": "replica",
+          "label": "reads"
+        },
+        {
+          "from": "db",
+          "to": "replica",
+          "label": "replicate",
+          "async": true
+        },
+        {
+          "from": "app",
+          "to": "psp",
+          "label": "charge"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Read replica for search and detail reads",
+          "why": "Takes the campaign read load off the writer. Replica lag is inside the 1 minute allowance, and the booking step re-checks on the primary.",
+          "driver": "Freshness: search may lag availability by up to a minute. Spike reads 521 per second",
+          "trigger": "Primary CPU above 70% in a campaign, or search p95 above 500 ms"
+        },
+        {
+          "what": "Media origin on Cloud Storage behind Cloud CDN",
+          "why": "Hotel photos are the heaviest bytes and travellers are global from this tier.",
+          "driver": "Geography: global travellers from 10k DAU",
+          "trigger": "Image p95 from far regions above 1 s, or origin egress cost rising"
+        },
+        {
+          "what": "Schedule Cloud Run minimum instances ahead of campaigns",
+          "why": "Flash sales and holiday campaigns are announced a week ahead, so pre-scale instead of waiting for autoscaling.",
+          "driver": "Traffic shape: 20x spike, announced a week ahead",
+          "trigger": "429s or cold-start p95 above 2 s in the last campaign"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Redis cache",
+          "why": "Search keys vary by city, dates and filters, so a cache hits rarely and adds invalidation. The replica is enough at 521 reads per second."
+        },
+        {
+          "what": "Elasticsearch",
+          "why": "18M room-night rows with a (city, night) index still answer inside budget on a replica."
+        },
+        {
+          "what": "Second region",
+          "why": "No residency rule beyond GDPR, and the CDN covers the global latency that matters for media."
+        },
+        {
+          "what": "Stay on Cloud Run",
+          "why": "Staying. Stateless requests and scale to zero suit a spiky workload, and pre-scaling covers the cold start."
+        },
+        {
+          "what": "Stay on Cloud SQL for Postgres",
+          "why": "Staying. 0.03 bookings per second and 174 row writes per second are trivial for one primary with a replica."
+        }
+      ]
+    },
+    {
+      "id": "x100",
+      "label": "100x",
+      "short": "100k DAU",
+      "title": "100k DAU: a search index fed from Postgres through Pub/Sub",
+      "summary": "A campaign now means 1.0k searches per second with price, rating and amenity facets over 91M room-night rows. That moves to Elasticsearch, fed by a Pub/Sub event written with each inventory change. Postgres stays the truth and the booking path is untouched.",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "Web and mobile apps",
+          "tech": "Web app + mobile apps, HTTPS JSON",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "extranet",
+          "label": "Extranet + channel mgrs",
+          "tech": "Hotel web UI, channel push API",
+          "icon": "user",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "lb",
+          "label": "Load balancer + CDN",
+          "tech": "Global ALB, CDN for media, Armor",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "auth",
+          "label": "Identity Platform",
+          "tech": "OIDC, traveller + hotel-staff tenants",
+          "icon": "key",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R3"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "images",
+          "label": "Media origin",
+          "tech": "Cloud Storage bucket behind Cloud CDN",
+          "icon": "storage",
+          "zone": "edge",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "app",
+          "label": "Spring Boot service",
+          "tech": "Cloud Run, outbox events, 4 vCPU",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6",
+            "R7"
+          ],
+          "role": "Same service. Every inventory change also writes an outbox row in its transaction. Search requests go to the index first, detail to the replica.",
+          "specifics": [
+            "Outbox row in the same transaction as the booking or push",
+            "Search endpoint calls Elasticsearch, falls back to the replica for one city when it is down"
+          ],
+          "tradeoffs": [
+            "Search and booking are still one deployable"
+          ],
+          "failures": [
+            {
+              "mode": "Event publish fails",
+              "mitigation": "Outbox row remains, the publisher retries; nothing is lost"
+            }
+          ],
+          "breaks": "A search spike still scales the booking code and its pool.",
+          "trigger": "Search traffic drives instance count past booking needs",
+          "cost": "~$400/mo est. (unverified)"
+        },
+        {
+          "id": "indexer",
+          "label": "Search indexer",
+          "tech": "Cloud Run worker, Pub/Sub push",
+          "icon": "worker",
+          "zone": "app",
+          "row": 1,
+          "status": "new",
+          "serves": [
+            "R4",
+            "R5"
+          ],
+          "alternatives": [
+            {
+              "what": "Index inside the Spring Boot service",
+              "why": "A burst of index writes after channel pushes would compete with checkout for CPU and connections."
+            },
+            {
+              "what": "Dataflow streaming job",
+              "why": "Heavy for small per-hotel document updates."
+            }
+          ],
+          "role": "Turns an inventory-changed event into a hotel document update. Also runs the full rebuild job.",
+          "specifics": [
+            "Debounces per hotel: many pushes within a few seconds become one write",
+            "Bulk API with batches of a few hundred documents"
+          ],
+          "tradeoffs": [
+            "Eventual: adds seconds to the freshness budget"
+          ],
+          "failures": [
+            {
+              "mode": "Poison event",
+              "mitigation": "Dead-letter after 5 attempts, alert, skip"
+            }
+          ],
+          "breaks": "Nothing in the measured range.",
+          "trigger": "Queue age above 45 s",
+          "cost": "~$30/mo est. (small worker, unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Cloud SQL Postgres",
+          "tech": "HA primary, 8 vCPU, outbox table",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R7"
+          ],
+          "role": "Writer for bookings and channel pushes. Search no longer reads it.",
+          "specifics": [
+            "8 vCPU 32 GB",
+            "Inventory table indexed on (room_type_id, night); old nights archived monthly"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Row writes and table size reach millions per day.",
+          "trigger": "Autovacuum lag or index bloat on room_night",
+          "cost": "~$800/mo est. (8 vCPU, 32 GB HA, about 2 x $400, unverified)"
+        },
+        {
+          "id": "replica",
+          "label": "Read replica",
+          "tech": "Cloud SQL replica, detail + rebuild reads",
+          "icon": "database",
+          "zone": "data",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R5"
+          ],
+          "role": "Serves hotel detail and the index rebuild job.",
+          "specifics": [
+            "Rebuild job reads here, never the primary"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Hotel detail at 4.2k per second in a campaign.",
+          "trigger": "Replica CPU above 70%",
+          "cost": "~$800/mo est. (unverified)"
+        },
+        {
+          "id": "search",
+          "label": "Search index",
+          "tech": "Elasticsearch, 3 data nodes, hotel docs",
+          "icon": "search",
+          "zone": "data",
+          "row": 2,
+          "status": "new",
+          "serves": [
+            "R1",
+            "R5",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Postgres GIN indexes and PostGIS",
+              "why": "City x date availability x price, rating and amenity facets over 91M rows keeps the spike on Postgres."
+            },
+            {
+              "what": "OpenSearch on GKE",
+              "why": "Same capability, but the team runs the cluster. A managed Elastic service costs more and removes that work."
+            }
+          ],
+          "role": "One document per hotel with city, rating, amenities and lowest nightly rate per date range. Answers city, dates, guests and filter queries without touching Postgres.",
+          "specifics": [
+            "Index rebuildable from Postgres in one batch job",
+            "Price and availability fields lag the truth by up to 60 s by design",
+            "Search returns hotel ids and prices; the detail page and booking read live data"
+          ],
+          "tradeoffs": [
+            "A second store to keep in step, and a rebuild path to keep working"
+          ],
+          "failures": [
+            {
+              "mode": "Cluster unavailable",
+              "mitigation": "Search degrades to a narrower Postgres query for one city at a time, with a banner. Booking is unaffected."
+            }
+          ],
+          "breaks": "Hot cities concentrate load on a few shards.",
+          "trigger": "Search p95 above 500 ms or node CPU above 70%",
+          "cost": "~$900/mo est. (3 nodes at about $300, unverified)"
+        },
+        {
+          "id": "pubsub",
+          "label": "Pub/Sub",
+          "tech": "inventory-changed topic, DLQ",
+          "icon": "queue",
+          "zone": "services",
+          "row": 1,
+          "status": "new",
+          "serves": [
+            "R4",
+            "R5"
+          ],
+          "alternatives": [
+            {
+              "what": "Apache Kafka",
+              "why": "Replay and ordering are not needed: the index is rebuilt from Postgres. It adds a cluster to run."
+            },
+            {
+              "what": "Postgres LISTEN/NOTIFY",
+              "why": "Loses events when no listener is connected."
+            },
+            {
+              "what": "Cloud Tasks",
+              "why": "One consumer and no fan-out to a second subscriber."
+            }
+          ],
+          "role": "Carries inventory-changed events from bookings and channel pushes to the indexer. Acknowledges fast so the writer never waits on the index.",
+          "specifics": [
+            "Event written in the same transaction (outbox), then published",
+            "At-least-once: the indexer applies by (hotel, night, version), so duplicates are no-ops",
+            "Dead-letter topic after 5 attempts"
+          ],
+          "tradeoffs": [
+            "Events can arrive out of order, the version check handles it"
+          ],
+          "failures": [
+            {
+              "mode": "Indexer behind",
+              "mitigation": "Queue depth alert. Search ages beyond 60 s, rebuild job on request."
+            }
+          ],
+          "breaks": "Nothing in the measured range.",
+          "trigger": "Oldest unacked message above 45 s",
+          "cost": "~$40/mo est. (data volume x about $40 per TiB, unverified)"
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Hosted fields, local currencies, 3DS",
+          "icon": "lock",
+          "zone": "services",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R6",
+            "R7"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "lb",
+          "label": "HTTPS"
+        },
+        {
+          "from": "extranet",
+          "to": "lb"
+        },
+        {
+          "from": "web",
+          "to": "auth",
+          "label": "sign-in"
+        },
+        {
+          "from": "lb",
+          "to": "app"
+        },
+        {
+          "from": "lb",
+          "to": "images"
+        },
+        {
+          "from": "app",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "app",
+          "to": "replica",
+          "label": "reads"
+        },
+        {
+          "from": "app",
+          "to": "search",
+          "label": "search"
+        },
+        {
+          "from": "db",
+          "to": "replica",
+          "label": "replicate",
+          "async": true
+        },
+        {
+          "from": "app",
+          "to": "pubsub",
+          "label": "events",
+          "async": true
+        },
+        {
+          "from": "pubsub",
+          "to": "indexer",
+          "label": "push",
+          "async": true
+        },
+        {
+          "from": "indexer",
+          "to": "search",
+          "label": "bulk index"
+        },
+        {
+          "from": "app",
+          "to": "psp",
+          "label": "charge"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Elasticsearch for search and facets",
+          "why": "Faceted queries by city, dates, price, rating and amenities no longer touch Postgres. The index is rebuildable from the replica.",
+          "driver": "Read to write about 200:1 on search. Campaign spike 1.0k searches per second over 91M room-night rows",
+          "trigger": "Replica CPU above 70% on search queries, or search p95 above 500 ms"
+        },
+        {
+          "what": "Pub/Sub plus an indexer worker, fed by an outbox",
+          "why": "Index writes leave the booking transaction. A one minute lag is allowed, so asynchronous and debounced is enough.",
+          "driver": "Freshness: up to 1 minute. 87 pushes per second at peak",
+          "trigger": "Oldest unacked event above 45 s"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Postgres GIN indexes and PostGIS for search",
+          "why": "Date availability joined with price and amenity facets at 1.0k per second would keep the campaign load on Postgres."
+        },
+        {
+          "what": "Redis cache",
+          "why": "Search pages are served by the index. Detail views peak at 208 per second, which the replica carries. Revisit at 1M."
+        },
+        {
+          "what": "Split into services",
+          "why": "Stateless Cloud Run instances absorb a search spike and the index takes the heavy queries. The split waits until search and booking scaling really diverge."
+        },
+        {
+          "what": "Second region",
+          "why": "Latency from far regions is mostly media, which the CDN already covers. No residency rule forces it."
+        },
+        {
+          "what": "Stay on Cloud SQL for Postgres",
+          "why": "Staying. 0.26 bookings per second and 868 row writes per second fit one 8 vCPU primary. Size and ops are the only change."
+        },
+        {
+          "what": "Stay on Cloud Run",
+          "why": "Staying. Request-based scaling matches a 20x spike, and the instance counts are far below project quotas."
+        }
+      ]
+    },
+    {
+      "id": "x1000",
+      "label": "1000x",
+      "short": "1M DAU",
+      "title": "1M DAU: split the paths, cache the spike, partition inventory",
+      "summary": "Search now peaks at 10.4k per second in a campaign while bookings are 52. They get separate services, so a search spike cannot starve checkout. Redis and a 30 to 60 s CDN cache absorb repeated popular searches. Inventory is partitioned by stay month. Cloud SQL stays the single writer.",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "Web and mobile apps",
+          "tech": "Web app + mobile apps, HTTPS JSON",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "extranet",
+          "label": "Extranet + channel mgrs",
+          "tech": "Hotel web UI, channel push API",
+          "icon": "user",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "lb",
+          "label": "Load balancer + CDN",
+          "tech": "Global ALB, CDN caches search 30-60 s",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Caches anonymous search responses for 30 to 60 s by normalised key, and applies Armor rate limits per IP and per hotel.",
+          "specifics": [
+            "Cache key: city, dates, guests, sorted filters, currency",
+            "Vary on nothing user-specific; signed-in traffic bypasses the cache",
+            "Per-hotel rate limit on the booking route"
+          ],
+          "tradeoffs": [
+            "Cache stays inside the 1 minute freshness allowance"
+          ],
+          "failures": [
+            {
+              "mode": "Stale price shown",
+              "mitigation": "Booking re-checks the live rate and shows a price-changed step"
+            }
+          ],
+          "breaks": "Hit rate depends on how concentrated popular searches are.",
+          "trigger": "Origin RPS above plan at campaign start",
+          "cost": "~$600/mo est. (cache egress, unverified)"
+        },
+        {
+          "id": "auth",
+          "label": "Identity Platform",
+          "tech": "OIDC, traveller + hotel-staff tenants",
+          "icon": "key",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R3"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "images",
+          "label": "Media origin",
+          "tech": "Cloud Storage bucket behind Cloud CDN",
+          "icon": "storage",
+          "zone": "edge",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "search-api",
+          "label": "Search API",
+          "tech": "Cloud Run, reads only, scales on RPS",
+          "icon": "funnel",
+          "zone": "app",
+          "row": 0,
+          "status": "new",
+          "serves": [
+            "R1",
+            "R5",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Keep one deployable and scale it",
+              "why": "A search spike would also scale booking code and its connection pool, and share one deploy blast radius."
+            },
+            {
+              "what": "GKE per service",
+              "why": "No capability Cloud Run lacks here, and more operations."
+            }
+          ],
+          "role": "Stateless read path for search and hotel detail. Cannot write to Postgres at all, so a spike cannot starve bookings.",
+          "specifics": [
+            "No database write credentials",
+            "Hotel detail read-through cache in Redis, 60 s TTL with jitter",
+            "Request coalescing for the same search key"
+          ],
+          "tradeoffs": [
+            "Separate deploy and config"
+          ],
+          "failures": [
+            {
+              "mode": "Search spike saturates it",
+              "mitigation": "Autoscale first, then shed anonymous crawler traffic at Armor. Bookings are unaffected."
+            }
+          ],
+          "breaks": "Cloud Run instance quotas near the top of the ladder.",
+          "trigger": "Instances above 70% of the project quota, or p95 above 500 ms",
+          "cost": "~$600/mo est. (average 10 instances x 2 vCPU at list price, unverified)"
+        },
+        {
+          "id": "app",
+          "label": "Booking API",
+          "tech": "Cloud Run, writes only, strict pool",
+          "icon": "server",
+          "zone": "app",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R2",
+            "R5",
+            "R7"
+          ],
+          "role": "Checkout and the live availability check on the primary. Search and ingest moved out.",
+          "specifics": [
+            "Connection pool sized for booking concurrency, not search",
+            "Per-hotel row locks released after the single decrement statement",
+            "Idempotency key unique on bookings"
+          ],
+          "tradeoffs": [
+            "Three deployables to release and monitor"
+          ],
+          "failures": [
+            {
+              "mode": "Hot hotel in a flash sale",
+              "mitigation": "Decrement is one short statement, lock wait capped at 2 s, return 'sold out' on timeout"
+            }
+          ],
+          "breaks": "Hot-row contention at the top of the ladder.",
+          "trigger": "Lock wait p95 above 100 ms",
+          "cost": "~$300/mo est. (unverified)"
+        },
+        {
+          "id": "ingest",
+          "label": "Channel ingest API",
+          "tech": "Cloud Run, batch upsert, idempotent",
+          "icon": "gateway",
+          "zone": "app",
+          "row": 2,
+          "status": "new",
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "alternatives": [
+            {
+              "what": "Keep ingest inside the Booking API",
+              "why": "Push bursts would share CPU and database connections with checkout."
+            },
+            {
+              "what": "Per-hotel queue (Cloud Tasks)",
+              "why": "Updates are overwrites by version, so ordering is handled without a queue per hotel."
+            }
+          ],
+          "role": "Accepts extranet edits and channel manager pushes, applies them as batched upserts, and writes the outbox event.",
+          "specifics": [
+            "Batch upsert by (room type, night), applying only if version is newer",
+            "Coalesces a hotel's pushes within a short window",
+            "Per-hotel rate limit so one noisy channel cannot starve others"
+          ],
+          "tradeoffs": [
+            "Slightly more than one hop of latency before a push is visible"
+          ],
+          "failures": [
+            {
+              "mode": "Database busy",
+              "mitigation": "Return 429 with Retry-After, channel managers retry with backoff"
+            }
+          ],
+          "breaks": "Row-write volume on one Postgres primary.",
+          "trigger": "Upsert p95 above 200 ms",
+          "cost": "~$150/mo est. (unverified)"
+        },
+        {
+          "id": "indexer",
+          "label": "Search indexer",
+          "tech": "Cloud Run, 3 instances, debounced bulk",
+          "icon": "worker",
+          "zone": "app",
+          "row": 3,
+          "status": "changed",
+          "serves": [
+            "R4",
+            "R5"
+          ],
+          "role": "Same worker, scaled for 347 pushes per second. Debounces per hotel.",
+          "specifics": [
+            "Bulk batches of 500 documents",
+            "Version check drops stale events"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Index lag above 60 s on bursts.",
+          "trigger": "Oldest unacked event above 45 s",
+          "cost": "~$100/mo est. (unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Cloud SQL Postgres",
+          "tech": "HA primary, 16 vCPU, room_night by month",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R7"
+          ],
+          "role": "Writer for bookings and batched upserts. room_night is partitioned by stay month.",
+          "specifics": [
+            "16 vCPU 64 GB",
+            "Monthly partitions of room_night; past months detached and archived",
+            "Batched upserts of a few hundred rows per statement"
+          ],
+          "tradeoffs": [
+            "Queries must carry the night range to prune partitions"
+          ],
+          "failures": [
+            {
+              "mode": "Partition missing for a new month",
+              "mitigation": "Job creates 3 months ahead; alert if fewer than 2 remain"
+            }
+          ],
+          "breaks": "8.7k row writes per second and 0.9B rows at 10M DAU.",
+          "trigger": "Autovacuum lag or WAL volume rising, or failover time over the target",
+          "cost": "~$1,600/mo est. (16 vCPU, 64 GB HA, about 2 x $800, unverified)"
+        },
+        {
+          "id": "replica",
+          "label": "Read replica",
+          "tech": "2 Cloud SQL replicas, detail + rebuild",
+          "icon": "database",
+          "zone": "data",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R5"
+          ],
+          "role": "Hotel detail reads and the rebuild job across two replicas.",
+          "specifics": [
+            "Search API round-robins across both",
+            "Rebuild reads from one only"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Replica count is a ceiling.",
+          "trigger": "Replica CPU above 70% after Redis hits",
+          "cost": "~$3,200/mo est. (2 x primary size, unverified)"
+        },
+        {
+          "id": "search",
+          "label": "Search index",
+          "tech": "Elasticsearch, 9 nodes, shards by city",
+          "icon": "search",
+          "zone": "data",
+          "row": 2,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R5",
+            "R8"
+          ],
+          "role": "Same index, sharded and replicated. Hot cities get their own shard count.",
+          "specifics": [
+            "Routing by city for filter queries",
+            "1 primary shard per ~20 GB, 1 replica",
+            "Hot-city shard split before campaigns"
+          ],
+          "tradeoffs": [
+            "Shard count is hard to change later without a reindex"
+          ],
+          "failures": [
+            {
+              "mode": "A node is lost",
+              "mitigation": "Replica shards promote, search stays up at reduced capacity"
+            }
+          ],
+          "breaks": "Spike on a handful of cities.",
+          "trigger": "Shard CPU above 70% on top 5 cities",
+          "cost": "~$2,700/mo est. (9 nodes at about $300, unverified)"
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Hosted fields, local currencies, 3DS",
+          "icon": "lock",
+          "zone": "services",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R6",
+            "R7"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "pubsub",
+          "label": "Pub/Sub",
+          "tech": "inventory-changed topic, DLQ",
+          "icon": "queue",
+          "zone": "services",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R4",
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "redis",
+          "label": "Memorystore Redis",
+          "tech": "Hotel view + search page cache, 60 s",
+          "icon": "zap",
+          "zone": "services",
+          "row": 2,
+          "status": "new",
+          "serves": [
+            "R1",
+            "R5"
+          ],
+          "alternatives": [
+            {
+              "what": "CDN cache only",
+              "why": "Hotel detail varies by dates and guests, so CDN keys fragment. Redis holds the assembled hotel view."
+            },
+            {
+              "what": "In-process cache per instance",
+              "why": "Hit rate falls as instances scale out."
+            }
+          ],
+          "role": "Holds the assembled hotel detail and the top search pages. TTL of 60 s matches the freshness allowance.",
+          "specifics": [
+            "60 s TTL with jitter, stale-while-refresh",
+            "Keys contain no user data, so nothing permissioned is shared",
+            "Standard tier, with a replica for failover"
+          ],
+          "tradeoffs": [
+            "Up to 60 s staleness, which the brief allows for search"
+          ],
+          "failures": [
+            {
+              "mode": "Cache down",
+              "mitigation": "Search API falls through to Elasticsearch and the replica with coalescing; circuit breaker opens after repeated errors"
+            }
+          ],
+          "breaks": "Memory for hot cities in flash sales.",
+          "trigger": "Hit rate below 80% or memory above 70%",
+          "cost": "~$400/mo est. (10 GB standard tier, unverified)"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "lb",
+          "label": "HTTPS"
+        },
+        {
+          "from": "extranet",
+          "to": "lb"
+        },
+        {
+          "from": "web",
+          "to": "auth",
+          "label": "sign-in"
+        },
+        {
+          "from": "lb",
+          "to": "search-api",
+          "label": "search"
+        },
+        {
+          "from": "lb",
+          "to": "app",
+          "label": "book"
+        },
+        {
+          "from": "lb",
+          "to": "ingest",
+          "label": "push"
+        },
+        {
+          "from": "lb",
+          "to": "images"
+        },
+        {
+          "from": "search-api",
+          "to": "search"
+        },
+        {
+          "from": "search-api",
+          "to": "replica"
+        },
+        {
+          "from": "search-api",
+          "to": "redis",
+          "label": "cache"
+        },
+        {
+          "from": "app",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "app",
+          "to": "psp",
+          "label": "charge"
+        },
+        {
+          "from": "ingest",
+          "to": "db",
+          "label": "upserts"
+        },
+        {
+          "from": "ingest",
+          "to": "pubsub",
+          "label": "events",
+          "async": true
+        },
+        {
+          "from": "pubsub",
+          "to": "indexer",
+          "label": "push",
+          "async": true
+        },
+        {
+          "from": "indexer",
+          "to": "search",
+          "label": "bulk index"
+        },
+        {
+          "from": "db",
+          "to": "replica",
+          "label": "replicate",
+          "async": true
+        }
+      ],
+      "moves": [
+        {
+          "what": "Split into Search API, Booking API and Channel ingest API",
+          "why": "Search is 200x the booking rate and spikes 20x. Separate scaling and connection pools stop a campaign from starving checkout.",
+          "driver": "Read to write about 200:1. Spike searches 10.4k per second against 52 bookings per second",
+          "trigger": "Booking p95 above budget while search CPU is saturated"
+        },
+        {
+          "what": "Cache search at the CDN for 30 to 60 s and hotel views in Redis",
+          "why": "Popular cities and dates repeat, and a 60 s TTL matches the freshness allowance. The booking step still checks live.",
+          "driver": "Freshness: up to 1 minute. Detail views 42k per second in a campaign",
+          "trigger": "Replica or Elasticsearch CPU above 70% on repeated queries"
+        },
+        {
+          "what": "Partition room_night by stay month; add a second replica",
+          "why": "365M rows and 3.5k row writes per second hurt vacuum and indexes on one table. Pruning keeps hot partitions small.",
+          "driver": "Data growth: 365M room-night rows. Pushes 347 per second",
+          "trigger": "Autovacuum lag or slow deletes on room_night"
+        },
+        {
+          "what": "Shard Elasticsearch by city with extra shards for hot cities",
+          "why": "A few cities draw most searches in a campaign.",
+          "driver": "Skew: a few hot cities and a few very large chains",
+          "trigger": "Shard CPU above 70% on the top cities"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Shard Postgres by hotel",
+          "why": "2.6 bookings per second and 3.5k row writes per second still fit one 16 vCPU primary with batching. Sharding costs cross-shard queries."
+        },
+        {
+          "what": "Dedicated cells for the largest chains",
+          "why": "Load follows hotel count, and each hotel is already a natural partition. A cell per chain adds ops without removing a bottleneck."
+        },
+        {
+          "what": "Kafka instead of Pub/Sub",
+          "why": "No replay or strict ordering needed: the index rebuilds from Postgres and events carry versions."
+        },
+        {
+          "what": "Stay on Cloud SQL for Postgres",
+          "why": "Staying. Booking rate is 2.6 per second and the heavy reads left the primary. Revisit when row writes or availability targets outgrow one writer."
+        },
+        {
+          "what": "Stay on Cloud Run",
+          "why": "Staying. Three stateless services scale on request count. Check project instance quotas before the first 1M campaign (unverified)."
+        },
+        {
+          "what": "Move to GKE",
+          "why": "Cloud Run covers scaling and rollout speed. GKE adds node pools and upgrades for a team of 20."
+        }
+      ]
+    },
+    {
+      "id": "x10000",
+      "label": "10000x",
+      "short": "10M DAU",
+      "title": "10M DAU: regional read stacks and a globally consistent inventory store",
+      "summary": "A campaign now means 104k searches per second from every continent and 8.7k inventory row writes per second. Read stacks (search API, Redis, Elasticsearch) run in three regions. Inventory and bookings move to Cloud Spanner so the last room still cannot be double-booked and one region can fail. This is a platform switch and is raised as a decision.",
+      "nodes": [
+        {
+          "id": "web",
+          "label": "Web and mobile apps",
+          "tech": "Web app + mobile apps, HTTPS JSON",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "extranet",
+          "label": "Extranet + channel mgrs",
+          "tech": "Hotel web UI, channel push API",
+          "icon": "user",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "lb",
+          "label": "Load balancer + CDN",
+          "tech": "Global ALB, multi-region backends, Armor",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R8"
+          ],
+          "role": "Routes each request to the nearest healthy region and sheds load per hotel and per IP during campaigns.",
+          "specifics": [
+            "Backends in 3 regions with failover",
+            "Per-hotel booking admission limit",
+            "Load shedding of anonymous search before booking"
+          ],
+          "tradeoffs": [
+            "Cache and backend config per region"
+          ],
+          "failures": [
+            {
+              "mode": "A region fails",
+              "mitigation": "Traffic moves to the next nearest region, search capacity drops, bookings continue"
+            }
+          ],
+          "breaks": "Armor rule and backend count limits.",
+          "trigger": "Region error rate above 2%",
+          "cost": "~$6,000/mo est. (unverified)"
+        },
+        {
+          "id": "auth",
+          "label": "Identity Platform",
+          "tech": "OIDC, traveller + hotel-staff tenants",
+          "icon": "key",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R3"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "images",
+          "label": "Media origin",
+          "tech": "Cloud Storage bucket behind Cloud CDN",
+          "icon": "storage",
+          "zone": "edge",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "search-api",
+          "label": "Search API",
+          "tech": "Cloud Run x3 regions, reads only",
+          "icon": "funnel",
+          "zone": "app",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R5",
+            "R8"
+          ],
+          "role": "Same read path, deployed in three regions. Reads hotel detail from Spanner with stale reads of up to 15 s.",
+          "specifics": [
+            "Stale reads of 15 s from the nearest replica",
+            "Regional Redis and regional index"
+          ],
+          "tradeoffs": [
+            "Three regions to deploy and monitor"
+          ],
+          "failures": [
+            {
+              "mode": "Regional Redis down",
+              "mitigation": "Fall through to regional Elasticsearch with coalescing"
+            }
+          ],
+          "breaks": "Instance quotas per region.",
+          "trigger": "Instances above 70% of quota in any region",
+          "cost": "~$12,000/mo est. (unverified)"
+        },
+        {
+          "id": "app",
+          "label": "Booking API",
+          "tech": "Cloud Run, Spanner txns, hotel queue",
+          "icon": "server",
+          "zone": "app",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R2",
+            "R5",
+            "R7"
+          ],
+          "role": "Checkout against Spanner with a read-write transaction per booking. Hot-hotel admission queue during campaigns.",
+          "specifics": [
+            "One read-write transaction: decrement room-nights and insert booking",
+            "Idempotency key unique in Spanner",
+            "Admission queue per hotel when lock wait rises"
+          ],
+          "tradeoffs": [
+            "Cross-continent write latency for far travellers, 200 to 300 ms est."
+          ],
+          "failures": [
+            {
+              "mode": "Spanner abort under contention",
+              "mitigation": "Retry with backoff up to a cap, then 'sold out'"
+            }
+          ],
+          "breaks": "Hot hotels at 520 bookings per second across the world.",
+          "trigger": "Transaction abort rate above 5%",
+          "cost": "~$1,500/mo est. (unverified)"
+        },
+        {
+          "id": "ingest",
+          "label": "Channel ingest API",
+          "tech": "Cloud Run, regional, batch mutations",
+          "icon": "gateway",
+          "zone": "app",
+          "row": 2,
+          "status": "changed",
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "role": "Applies batched mutations to Spanner. Debounces per hotel.",
+          "specifics": [
+            "Mutations in batches under the transaction limits",
+            "Per-hotel rate limits"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Spanner write throughput per node.",
+          "trigger": "CPU above 65% on Spanner",
+          "cost": "~$1,000/mo est. (unverified)"
+        },
+        {
+          "id": "indexer",
+          "label": "Search indexer",
+          "tech": "Cloud Run x3 regions, regional topics",
+          "icon": "worker",
+          "zone": "app",
+          "row": 3,
+          "status": "changed",
+          "serves": [
+            "R4",
+            "R5"
+          ],
+          "role": "Regional indexers feed regional Elasticsearch clusters from the change stream.",
+          "specifics": [
+            "Spanner change stream to Pub/Sub",
+            "Version check drops stale events"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Fan-out cost.",
+          "trigger": "Oldest unacked event above 45 s",
+          "cost": "~$600/mo est. (unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Cloud Spanner",
+          "tech": "PostgreSQL dialect, multi-region config",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R7"
+          ],
+          "alternatives": [
+            {
+              "what": "Stay on Cloud SQL Postgres with cross-region replicas",
+              "why": "One writer region, failover is manual or minutes, and 8.7k row writes per second plus 520 bookings per second on hot rows lean on one primary. Valid if a 99.95% target is enough."
+            },
+            {
+              "what": "AlloyDB",
+              "why": "Higher single-writer throughput but still one region for writes."
+            },
+            {
+              "what": "Citus-style sharding by hotel",
+              "why": "Team would own shard rebalancing and cross-shard queries."
+            }
+          ],
+          "role": "Source of truth for inventory and bookings with strong consistency across regions. Row-night decrement stays one transaction.",
+          "specifics": [
+            "Interleave room_night under hotel by hotel_id",
+            "Strong reads on booking, stale reads for detail",
+            "About 10 nodes at the start, resize by CPU"
+          ],
+          "tradeoffs": [
+            "One-way door. Different dialect and operations model from Cloud SQL, exit means a rewrite of data access."
+          ],
+          "failures": [
+            {
+              "mode": "A region is lost",
+              "mitigation": "Quorum survives with 3 replicas, writes continue"
+            }
+          ],
+          "breaks": "Hot hotel keys at flash-sale peak.",
+          "trigger": "CPU above 65% or p99 above 100 ms on a hot key",
+          "cost": "~$8,000/mo est. (10 nodes at about $800, unverified)"
+        },
+        {
+          "id": "replica",
+          "label": "Read replica",
+          "tech": "2 Cloud SQL replicas, detail + rebuild",
+          "icon": "database",
+          "zone": "data",
+          "row": 1,
+          "status": "removed",
+          "serves": [
+            "R1",
+            "R5"
+          ],
+          "role": "Replaced by Spanner read replicas and stale reads.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "search",
+          "label": "Search index",
+          "tech": "Elasticsearch x3 regions, 15 nodes each",
+          "icon": "search",
+          "zone": "data",
+          "row": 2,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R5",
+            "R8"
+          ],
+          "role": "A regional cluster per region, fed from the same events.",
+          "specifics": [
+            "Rebuild per region from Spanner",
+            "Hot-city shards sized before campaigns"
+          ],
+          "tradeoffs": [
+            "Three clusters to run"
+          ],
+          "failures": [
+            {
+              "mode": "Region index stale",
+              "mitigation": "Rebuild job in that region, global traffic shifts for a while"
+            }
+          ],
+          "breaks": "Cost.",
+          "trigger": "Search p95 above 500 ms",
+          "cost": "~$40,000/mo est. (45 nodes at about $900, unverified)"
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Hosted fields, local currencies, 3DS",
+          "icon": "lock",
+          "zone": "services",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R6",
+            "R7"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "pubsub",
+          "label": "Pub/Sub",
+          "tech": "Pub/Sub, regional topics and DLQs",
+          "icon": "queue",
+          "zone": "services",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R4",
+            "R5"
+          ],
+          "role": "Regional topics so each region indexes locally.",
+          "specifics": [
+            "Message ordering by hotel key where needed"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Nothing in the measured range.",
+          "trigger": "Oldest unacked above 45 s",
+          "cost": "~$400/mo est. (unverified)"
+        },
+        {
+          "id": "redis",
+          "label": "Memorystore Redis",
+          "tech": "Memorystore Redis x3 regions",
+          "icon": "zap",
+          "zone": "services",
+          "row": 2,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R5"
+          ],
+          "role": "Regional hotel view cache.",
+          "specifics": [
+            "60 s TTL with jitter"
+          ],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "Memory for hot cities.",
+          "trigger": "Hit rate below 80%",
+          "cost": "~$3,000/mo est. (unverified)"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "lb",
+          "label": "HTTPS"
+        },
+        {
+          "from": "extranet",
+          "to": "lb"
+        },
+        {
+          "from": "web",
+          "to": "auth",
+          "label": "sign-in"
+        },
+        {
+          "from": "lb",
+          "to": "search-api",
+          "label": "search"
+        },
+        {
+          "from": "lb",
+          "to": "app",
+          "label": "book"
+        },
+        {
+          "from": "lb",
+          "to": "ingest",
+          "label": "push"
+        },
+        {
+          "from": "lb",
+          "to": "images"
+        },
+        {
+          "from": "search-api",
+          "to": "search"
+        },
+        {
+          "from": "search-api",
+          "to": "db",
+          "label": "stale"
+        },
+        {
+          "from": "search-api",
+          "to": "redis",
+          "label": "cache"
+        },
+        {
+          "from": "app",
+          "to": "db",
+          "label": "txn"
+        },
+        {
+          "from": "app",
+          "to": "psp",
+          "label": "charge"
+        },
+        {
+          "from": "ingest",
+          "to": "db",
+          "label": "mutations"
+        },
+        {
+          "from": "ingest",
+          "to": "pubsub",
+          "label": "events",
+          "async": true
+        },
+        {
+          "from": "pubsub",
+          "to": "indexer",
+          "label": "push",
+          "async": true
+        },
+        {
+          "from": "indexer",
+          "to": "search",
+          "label": "bulk index"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Move inventory and bookings from Cloud SQL to Cloud Spanner (PostgreSQL dialect)",
+          "why": "One globally consistent writer set with region failure tolerance, so the last room stays unique everywhere. Raised as a decision with its exit cost.",
+          "driver": "Row writes 8.7k per second, 0.9B room-night rows, availability target 99.99% (inferred), 3 regions",
+          "trigger": "Cloud SQL CPU above 70% after batching, or failover time over the target"
+        },
+        {
+          "what": "Run search API, Redis and Elasticsearch in three regions",
+          "why": "Search is 104k per second in a campaign from every continent. Local serving cuts latency and failure blast radius.",
+          "driver": "Geography: global. Spike 104k searches per second",
+          "trigger": "Search p95 from a far region above budget"
+        },
+        {
+          "what": "Admission control per hotel during campaigns",
+          "why": "A hot hotel can take 520 bookings per second. Queue or reject beyond what the hotel's rooms can sell.",
+          "driver": "Skew: hot hotels in flash sales. Booking spike 520 per second",
+          "trigger": "Spanner abort rate above 5% or lock wait p95 above 100 ms"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Cloud SQL for Postgres",
+          "why": "Valid if 99.95% is acceptable and regional failover minutes are fine. Hot rows under 520 bookings per second and 8.7k row writes per second sit on one writer."
+        },
+        {
+          "what": "Stay on Cloud Run",
+          "why": "Staying. Stateless services scale on request count in each region. GKE adds ops with no capability gain; check regional quotas (unverified)."
+        },
+        {
+          "what": "Kafka",
+          "why": "No replay or strict global ordering needed. Pub/Sub with versions is enough."
+        },
+        {
+          "what": "Stay on Elasticsearch",
+          "why": "Staying. The index is rebuildable and each region needs its own cluster; a managed move would not remove the cost."
+        },
+        {
+          "what": "Active-active writes in app code over Cloud SQL",
+          "why": "Needs a conflict strategy for room counts, which is exactly what Spanner solves."
+        }
+      ]
+    }
+  ]
+};
+</script>
+<script>
+(function () {
+  const ICONS = {
+    browser: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r=".6"/><circle cx="9" cy="6.5" r=".6"/>',
+    mobile: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
+    shield: '<path d="M12 3l7.5 3v6c0 4.6-3.1 7.7-7.5 9.2C7.6 19.7 4.5 16.6 4.5 12V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+    balancer: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v9.6M12 11l-6.2 6M12 11l6.2 6"/>',
+    lambda: '<path d="M6 4h3.5L18 20"/><path d="M12.3 10.5L7 20"/>',
+    server: '<rect x="4" y="3.5" width="16" height="7" rx="1.8"/><rect x="4" y="13.5" width="16" height="7" rx="1.8"/><path d="M8 7h.01M8 17h.01M12 7h4M12 17h4"/>',
+    worker: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+    database: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13"/><path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 5 9-5" opacity=".55"/>',
+    funnel: '<path d="M3.5 4.5h17l-6.5 8v6l-4 2v-8z"/>',
+    zap: '<path d="M13.5 2.5L4.5 14h7l-1 7.5 9-11.5h-7z"/>',
+    queue: '<rect x="3" y="4.5" width="18" height="4" rx="1.2"/><rect x="3" y="10.5" width="18" height="4" rx="1.2"/><rect x="3" y="16.5" width="11" height="4" rx="1.2"/>',
+    broadcast: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+    gateway: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+    key: '<circle cx="8" cy="15.5" r="4.2"/><path d="M11 12.5l9-9M16.5 7l3 3"/>',
+    storage: '<path d="M3 7.5l9-4.5 9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2.2"/><path d="M3.5 6.5l8.5 6 8.5-6"/>',
+    cloud: '<path d="M7 18.5h10.5a4 4 0 0 0 .6-8A6.2 6.2 0 0 0 6.2 9.6 4.5 4.5 0 0 0 7 18.5z"/>',
+    chart: '<path d="M4 20V11M10 20V5M16 20v-7M21.5 20h-19"/>',
+    breaker: '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="16" cy="12" r="2.3"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'
+  };
+  const svgIcon = (k, cls) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (cls ? ' class="' + cls + '"' : '') + '>' + (ICONS[k] || ICONS.cloud) + '</svg>';
+  const CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  const NW = 216, NH = 112, CW = 300, RH = 136, TOP = 58, PADX = 20, PADB = 24, CH = 20, GAP = CW - NW;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const zoneIdx = Object.fromEntries(DESIGN.zones.map((z, i) => [z.id, i]));
+  const reqText = Object.fromEntries(DESIGN.requirements.map((r) => [r.id, r.text]));
+  let tier = DESIGN.tiers[0], opener = null;
+
+  $("title").textContent = DESIGN.title;
+  $("stack").textContent = DESIGN.stack;
+  $("problem").textContent = DESIGN.problem;
+  $("reqs").innerHTML = DESIGN.requirements.map((r) => '<span class="req"><b>' + esc(r.id) + '</b>' + esc(r.text) + '</span>').join("");
+
+  const SRC = (s) => (String(s).toLowerCase().match(/^(repo|brief|user|inferred|unknown)/) || [, "unknown"])[1];
+  $("profile").innerHTML = (DESIGN.profile || []).map((p) => '<div class="prof"><span class="eyebrow">' + esc(p.label) + '</span><span class="v">' + esc(p.value) + '</span><span class="d">' + esc(p.drives) + '</span><span class="src ' + SRC(p.source) + '">' + esc(p.source) + '</span></div>').join("");
+
+  DESIGN.tiers.forEach((t) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.setAttribute("role", "tab"); b.id = "tab-" + t.id;
+    b.innerHTML = '<span class="t">' + esc(t.label) + '</span><span class="l">' + esc(t.short) + '</span>';
+    b.addEventListener("click", () => { location.hash = t.id; });
+    $("tabs").appendChild(b);
+  });
+
+  $("legend").innerHTML =
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="1.6" stroke-dasharray="7 5"/></svg>Request path</span>' +
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="2.2" stroke-dasharray="2 6" stroke-linecap="round"/></svg>Async or push</span>' +
+    '<span><b style="color:var(--new)">NEW</b> added at this tier</span><span><b style="color:var(--changed)">CHANGED</b> reconfigured</span><span><b style="color:var(--removed)">REMOVED</b> no longer needed</span>';
+
+  $("only").addEventListener("change", (e) => $("canvas").classList.toggle("only-changes", e.target.checked));
+
+  const pos = (n) => ({ x: PADX + zoneIdx[n.zone] * CW + (CW - NW) / 2, y: TOP + n.row * RH });
+
+  function bez(x1, y1, c1x, c1y, c2x, c2y, x2, y2) {
+    const t = 0.5, m = 0.5, mx = m * m * m * x1 + 3 * m * m * t * c1x + 3 * m * t * t * c2x + t * t * t * x2;
+    const my = m * m * m * y1 + 3 * m * m * t * c1y + 3 * m * t * t * c2y + t * t * t * y2;
+    return { d: "M" + x1 + "," + y1 + " C" + c1x + "," + c1y + " " + c2x + "," + c2y + " " + x2 + "," + y2, mx, my };
+  }
+  function rounded(pts, r) {
+    let d = "M" + pts[0][0] + "," + pts[0][1];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+      const r1 = Math.min(r, Math.hypot(x - px, y - py) / 2, Math.hypot(nx - x, ny - y) / 2);
+      const ax = x - Math.sign(x - px) * r1, ay = y - Math.sign(y - py) * r1;
+      const bx = x + Math.sign(nx - x) * r1, by = y + Math.sign(ny - y) * r1;
+      d += " L" + ax + "," + ay + " Q" + x + "," + y + " " + bx + "," + by;
+    }
+    const last = pts[pts.length - 1];
+    return d + " L" + last[0] + "," + last[1];
+  }
+  /* Adjacent columns get a curve, same column a vertical curve, longer spans run along a channel under the nodes. */
+  function wirePath(a, b, k, channelTop) {
+    const pa = pos(a), pb = pos(b), ca = zoneIdx[a.zone], cb = zoneIdx[b.zone];
+    if (ca === cb && Math.abs(a.row - b.row) > 1) {
+      const xr = pa.x + NW, gx = xr + 18, ya = pa.y + NH / 2, yb = pb.y + NH / 2;
+      return { d: rounded([[xr, ya], [gx, ya], [gx, yb], [xr, yb]], 10), mx: gx, my: (ya + yb) / 2, side: true, inset: true };
+    }
+    if (ca === cb) {
+      const down = pb.y > pa.y, x = pa.x + NW / 2, y1 = down ? pa.y + NH : pa.y, y2 = down ? pb.y : pb.y + NH;
+      return Object.assign(bez(x, y1, x, y1 + (down ? 20 : -20), x, y2 + (down ? -20 : 20), x, y2), { side: true });
+    }
+    const right = cb > ca, y1 = pa.y + NH / 2, y2 = pb.y + NH / 2;
+    const x1 = right ? pa.x + NW : pa.x, x2 = right ? pb.x : pb.x + NW;
+    if (Math.abs(cb - ca) === 1) {
+      const d = GAP / 2;
+      return bez(x1, y1, x1 + (right ? d : -d), y1, x2 + (right ? -d : d), y2, x2, y2);
+    }
+    const off = (k % 4) * 6 - 9;
+    const g1 = x1 + (right ? GAP / 2 : -GAP / 2) + off, g2 = x2 + (right ? -GAP / 2 : GAP / 2) - off;
+    const cy = channelTop + k * CH;
+    return { d: rounded([[x1, y1], [g1, y1], [g1, cy], [g2, cy], [g2, y2], [x2, y2]], 10), mx: (g1 + g2) / 2, my: cy };
+  }
+
+  function draw() {
+    const c = $("canvas");
+    const maxRow = Math.max(...tier.nodes.map((n) => n.row));
+    const byId0 = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    const long = tier.edges.filter((e) => byId0[e.from] && byId0[e.to] && Math.abs(zoneIdx[byId0[e.from].zone] - zoneIdx[byId0[e.to].zone]) > 1);
+    const channelTop = TOP + maxRow * RH + NH + 28;
+    const W = PADX * 2 + DESIGN.zones.length * CW, H = channelTop + Math.max(0, long.length - 1) * CH + (long.length ? 24 : 0) + PADB - (long.length ? 0 : 28);
+    c.style.width = W + "px"; c.style.height = H + "px";
+    fit(W, H);
+    let html = "";
+    DESIGN.zones.forEach((z, i) => {
+      html += '<div class="lane" style="left:' + (PADX + i * CW + 6) + 'px;width:' + (CW - 12) + 'px"></div>';
+      html += '<div class="lane-head" style="left:' + (PADX + i * CW + 18) + 'px"><i style="background:var(--z-' + z.id + '-ink)"></i>' + esc(z.label) + '</div>';
+    });
+    const byId = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    let wires = "", labels = "";
+    tier.edges.forEach((e) => {
+      const a = byId[e.from], b = byId[e.to];
+      if (!a || !b) return;
+      const w = wirePath(a, b, long.indexOf(e), channelTop);
+      const cls = 'wire ' + (e.async ? "async" : "sync");
+      wires += '<path class="' + cls + '" data-a="' + e.from + '" data-b="' + e.to + '" d="' + w.d + '" marker-end="url(#ah)"/>';
+      if (e.label) {
+        const txt = e.label.length > 10 ? e.label.slice(0, 9) + "…" : e.label;
+        const tw = txt.length * 6.4 + 14, lx = w.inset ? w.mx + 4 + tw / 2 : w.side ? w.mx + 8 + tw / 2 : w.mx;
+        labels += '<g class="wire-label" data-a="' + e.from + '" data-b="' + e.to + '"><rect x="' + (lx - tw / 2) + '" y="' + (w.my - 10) + '" width="' + tw + '" height="20" rx="10"/><text x="' + lx + '" y="' + (w.my + 3.8) + '" text-anchor="middle">' + esc(txt) + '</text><title>' + esc(e.label) + '</title></g>';
+      }
+    });
+    html += '<svg class="wires" width="' + W + '" height="' + H + '"><defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--wire)"/></marker></defs>' + wires + labels + '</svg>';
+    tier.nodes.forEach((n) => {
+      const p = pos(n);
+      const st = n.status === "same" ? "" : '<span class="st">' + n.status.toUpperCase() + '</span>';
+      html += '<button class="node ' + n.status + '" data-id="' + n.id + '" style="left:' + p.x + 'px;top:' + p.y + 'px;width:' + NW + 'px;height:' + NH + 'px" aria-label="' + esc(n.label + ", " + n.status + ". Open details") + '">' +
+        '<span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+        '<span style="min-width:0;overflow:hidden"><span class="nm">' + esc(n.label) + '</span><span class="tc">' + esc(n.tech) + '</span></span>' + st + '</button>';
+    });
+    c.innerHTML = html;
+    c.querySelectorAll(".node").forEach((el) => {
+      el.addEventListener("click", () => openNode(el.dataset.id, el));
+      el.addEventListener("mouseenter", () => hot(el.dataset.id));
+      el.addEventListener("mouseleave", () => hot(null));
+      el.addEventListener("focus", () => hot(el.dataset.id));
+      el.addEventListener("blur", () => hot(null));
+    });
+  }
+
+  let dims = null;
+  function fit(W, H) {
+    if (W) dims = [W, H];
+    if (!dims) return;
+    const avail = $("cwrap").clientWidth;
+    const scale = Math.max(0.62, Math.min(1, avail / dims[0]));
+    $("canvas").style.transform = "scale(" + scale + ")";
+    $("cfit").style.width = dims[0] * scale + "px";
+    $("cfit").style.height = dims[1] * scale + "px";
+  }
+  window.addEventListener("resize", () => fit());
+
+  function hot(id) {
+    const c = $("canvas");
+    c.classList.toggle("hovering", !!id);
+    c.querySelectorAll(".hot").forEach((e) => e.classList.remove("hot"));
+    if (!id) return;
+    const linked = new Set([id]);
+    c.querySelectorAll("[data-a]").forEach((e) => {
+      if (e.dataset.a === id || e.dataset.b === id) { e.classList.add("hot"); linked.add(e.dataset.a); linked.add(e.dataset.b); }
+    });
+    c.querySelectorAll(".node").forEach((e) => { if (linked.has(e.dataset.id)) e.classList.add("hot"); });
+  }
+
+  function list(items) { return items && items.length ? '<ul>' + items.map((i) => '<li>' + esc(i) + '</li>').join("") + '</ul>' : ""; }
+
+  function openNode(id, from) {
+    const n = tier.nodes.find((x) => x.id === id);
+    if (!n) return;
+    if (from) opener = from;
+    const m = $("modal");
+    const statusText = { new: "New at " + tier.label, changed: "Changed at " + tier.label, same: "Unchanged at " + tier.label, removed: "Removed at " + tier.label }[n.status];
+    const conns = tier.edges.filter((e) => e.from === id || e.to === id).map((e) => {
+      const other = e.from === id ? e.to : e.from;
+      const o = tier.nodes.find((x) => x.id === other);
+      return o ? '<button class="conn" data-go="' + o.id + '">' + (e.from === id ? "→ " : "← ") + esc(o.label) + (e.label ? " · " + esc(e.label) : "") + '</button>' : "";
+    }).join("");
+    let body = '<div class="pills"><span class="pill ' + n.status + '">' + esc(statusText) + '</span>' + (n.cost ? '<span class="pill same">' + esc(n.cost) + '</span>' : "") + '</div>';
+    if (n.serves && n.serves.length) body += '<div class="sec"><h4>Why this problem needs it</h4><div class="serves">' + n.serves.map((r) => '<div><b>' + esc(r) + '</b>' + esc(reqText[r] || "") + '</div>').join("") + '</div></div>';
+    if (n.role) body += '<div class="sec"><h4>Role</h4><p>' + esc(n.role) + '</p></div>';
+    if (n.specifics && n.specifics.length) body += '<div class="sec"><h4>Specifics</h4>' + list(n.specifics) + '</div>';
+    if (n.tradeoffs && n.tradeoffs.length) body += '<div class="sec"><h4>Trade-offs</h4>' + list(n.tradeoffs) + '</div>';
+    const altSrc = n.alternatives != null ? n.alternatives : (DESIGN.tiers.slice(0, DESIGN.tiers.indexOf(tier)).reverse().map((t) => (t.nodes.find((x) => x.id === n.id) || {}).alternatives).find((a) => a != null));
+    body += '<div class="sec"><h4>Alternatives considered</h4>' + (Array.isArray(altSrc) && altSrc.length
+      ? '<div class="alts">' + altSrc.map((a) => '<div><strong>' + esc(a.what) + '</strong><span>' + esc(a.why) + '</span></div>').join("") + '</div>'
+      : '<p class="muted">' + esc(typeof altSrc === "string" && altSrc ? altSrc : "No alternatives were considered for this component.") + '</p>') + '</div>';
+    if (n.failures && n.failures.length) body += '<div class="sec"><h4>Failure modes</h4><div class="fail">' + n.failures.map((f) => '<div><strong>' + esc(f.mode) + '</strong><span>' + esc(f.mitigation) + '</span></div>').join("") + '</div></div>';
+    if (n.breaks) body += '<div class="next"><h4 class="eyebrow" style="margin:0">What breaks next</h4><p>' + esc(n.breaks) + '</p>' + (n.trigger ? '<p class="trigger">Trigger: ' + esc(n.trigger) + '</p>' : "") + '</div>';
+    if (conns) body += '<div class="sec"><h4>Connections</h4><div class="conns">' + conns + '</div></div>';
+    m.innerHTML = '<div class="m-head"><span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+      '<div style="min-width:0"><h3 id="m-name">' + esc(n.label) + '</h3><div class="m-tech">' + esc(n.tech) + '</div></div>' +
+      '<button class="close" aria-label="Close details">' + CLOSE + '</button></div><div class="m-body">' + body + '</div>';
+    m.querySelector(".close").addEventListener("click", () => m.close());
+    m.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => openNode(b.dataset.go)));
+    if (!m.open) m.showModal();
+    m.querySelector(".close").focus();
+  }
+  $("modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $("modal").addEventListener("close", () => { if (opener && document.contains(opener)) opener.focus(); });
+
+  function cards() {
+    $("moves").innerHTML = tier.moves.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span>' + (x.driver ? '<span class="driver"><b>Driven by</b> ' + esc(x.driver) + '</span>' : "") + '<span class="trigger">Trigger: ' + esc(x.trigger) + '</span></li>').join("");
+    $("rejected").innerHTML = tier.rejected.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span></li>').join("");
+    const L = DESIGN.load;
+    $("load").innerHTML = '<tr><th></th>' + DESIGN.tiers.map((t) => '<th>' + esc(t.label) + '</th>').join("") + '</tr>' +
+      L.rows.map((r, i) => '<tr><td>' + esc(r) + '</td>' + DESIGN.tiers.map((t) => '<td class="num' + (t.id === tier.id ? " cur" : "") + '">' + esc(L.values[t.id][i]) + '</td>').join("") + '</tr>').join("");
+    $("load-note").textContent = L.note || "";
+  }
+
+  function show() {
+    const id = location.hash.slice(1);
+    tier = DESIGN.tiers.find((t) => t.id === id) || DESIGN.tiers[0];
+    DESIGN.tiers.forEach((t) => $("tab-" + t.id).setAttribute("aria-selected", String(t.id === tier.id)));
+    $("tier-title").textContent = tier.title;
+    $("tier-summary").textContent = tier.summary;
+    if ($("modal").open) $("modal").close();
+    $("canvas").classList.toggle("baseline", tier === DESIGN.tiers[0]); /* nothing changes at the first tier */
+    draw(); cards();
+  }
+  window.addEventListener("hashchange", show);
+  show();
+})();
+</script>

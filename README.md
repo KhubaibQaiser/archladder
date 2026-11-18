@@ -25,22 +25,47 @@ brief, a ticket or a problem, and it:
 Every page carries a banner saying it's an AI-generated suggestion to verify. It recommends and never decides. It changes no code. The output ends in a numbered list of decisions
 for you.
 
-## Example
+## See it
 
-[`examples/caseflow/index.html`](examples/caseflow/index.html) is the design for
-[Caseflow](https://github.com/KhubaibQaiser/mini-crm), a legal-intake CRM on Next.js and Supabase,
-scaled as one global organisation with a live board, presence and data residency. Download it and
-open it in a browser.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/diagram-dark.png">
+  <img src="docs/screenshots/diagram-light.png" alt="A tier diagram: components in client, edge, application, data and platform columns, with animated flows and NEW and CHANGED badges.">
+</picture>
 
-What the ladder looks like for Caseflow:
+**[Try the live examples](https://khubaibqaiser.github.io/archladder/)**: switch tiers, hover a component
+to trace its connections, click it for the details.
 
-| Tier | What changes | Forced by |
-|---|---|---|
-| 1k | Managed realtime from day one | Presence needs two-way sockets |
-| 10k | A second home database in the EU | Residency, not load |
-| 100k | Read replicas inside each jurisdiction, partitioned activity | Read-heavy, 400M timeline rows |
-| 1M | Search engine fed by an outbox, dedicated realtime | 200M contacts, 300k sockets |
-| 10M | Geo-partitioned distributed SQL, event stream, socket fleet | 21k writes per second across five jurisdictions |
+<table>
+<tr>
+<td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/modal-dark.png">
+  <img src="docs/screenshots/modal-light.png" alt="The details modal for one component: requirements it serves, role, trade-offs, alternatives considered, failure modes and what breaks next.">
+</picture>
+<p align="center"><sub>Click any component for its role, alternatives, failure modes and what breaks next.</sub></p>
+</td>
+<td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/profile-dark.png">
+  <img src="docs/screenshots/profile-light.png" alt="The workload profile cards, each with its value, what it drives in the design, and its source.">
+</picture>
+<p align="center"><sub>The workload profile drives every tier, and each row shows where it came from.</sub></p>
+</td>
+</tr>
+</table>
+
+## Examples
+
+Each example is a fictional product: a short brief, the interview answers archladder was given, and
+the page it generated. They're not affiliated with any real company.
+
+| Example | Brief | Page | What drives the design |
+|---|---|---|---|
+| Grocery delivery app | [brief](examples/grocery-delivery/brief.md) | [page](https://khubaibqaiser.github.io/archladder/examples/grocery-delivery/) | Delivery slots that must never oversell, bursty slot releases, nightly picking |
+| Hotel booking marketplace | [brief](examples/hotel-booking/brief.md) | [page](https://khubaibqaiser.github.io/archladder/examples/hotel-booking/) | 200 searches per booking, campaign spikes, never double-book the last room |
+| Team chat app | [brief](examples/team-chat/brief.md) | [page](https://khubaibqaiser.github.io/archladder/examples/team-chat/) | Two-way sockets, ordered fan-out to 50k-member channels, tenant skew |
+
+Same ladder, three different climbs: the profile, not the user count, decides what each tier adds.
 
 ## Install
 
@@ -102,7 +127,8 @@ references/scaling.md         workload profile, tier maths, scaling playbook
 references/design-schema.md   the DESIGN object the page renders
 assets/system-design.html     the page template (stack-free skeleton)
 scripts/check-design.mjs      validates a generated page
-examples/                     finished design pages
+examples/                     example briefs and the pages they produced
+docs/                         the GitHub Pages site and README screenshots
 .claude-plugin/               plugin and marketplace manifests
 ```
 

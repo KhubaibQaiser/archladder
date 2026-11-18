@@ -7,12 +7,14 @@ Thanks for helping. Issues and pull requests are welcome.
 The best examples come from real projects whose workload profile differs from the existing ones
 (write-heavy ingest, chat, bursty traffic, multi-tenant SaaS).
 
-1. Run `/archladder` on the project and answer its interview.
-2. Save the page as `examples/<name>/index.html`, with `<!doctype html>` as the first line.
+1. Write `examples/<name>/brief.md`: the brief, then the interview answers you gave, so the example
+   is reproducible. Use a fictional product with no real company names.
+2. Run `/archladder` on the brief and save the page as `examples/<name>/index.html`, with
+   `<!doctype html>` as the first line.
 3. Run `node scripts/check-design.mjs examples/<name>/index.html` until it reports no errors.
 4. Open it in a browser at desktop and phone widths, in light and dark mode. Check that no text is
    cut off and no wire label sits on a box.
-5. Add a row for it to the example section of the README.
+5. Add a row to the examples table in the README and a card to `docs/index.html`.
 
 Don't include secrets, private customer data or internal hostnames.
 

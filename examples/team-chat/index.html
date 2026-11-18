@@ -1,0 +1,2922 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Team Chat System Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: problem header and requirements, tier switcher, zoned architecture canvas, then moves, rejections and load. */
+:root {
+  --bg: #eef1f6; --surface: #ffffff; --surface-2: #f6f8fb; --ink: #141b26; --ink-2: #4d5868; --line: #d3d9e3;
+  --accent: #3157d5; --accent-ink: #ffffff; --wire: #8a95a7;
+  --new: #0d7a4e; --changed: #b35c00; --removed: #a3324a;
+  --z-client: #e4ebff; --z-client-ink: #2f4fb8;
+  --z-edge: #e2f2f7; --z-edge-ink: #106579;
+  --z-app: #e6f4ea; --z-app-ink: #1f6b3a;
+  --z-data: #fdeedc; --z-data-ink: #8a4a06;
+  --z-services: #f1e8fb; --z-services-ink: #6a3aa8;
+  --lane: rgba(20, 27, 38, .035);
+  --shadow: 0 1px 2px rgba(20, 27, 38, .06), 0 4px 14px rgba(20, 27, 38, .06);
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px }
+.wrap { max-width: 1440px; margin: 0 auto; display: grid; gap: 22px }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.15 }
+h1 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 700; letter-spacing: -.01em }
+h2 { font-size: 18px } h3 { font-size: 20px }
+p { margin: 0 }
+.muted { color: var(--ink-2) }
+.eyebrow { font: 600 11px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+button { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+header { display: grid; gap: 10px }
+.ai-warn { border: 1px solid var(--changed); background: color-mix(in srgb, var(--changed) 9%, var(--surface)); border-radius: 12px; padding: 12px 16px; font-size: 14px; max-width: 100%; overflow-wrap: anywhere }
+.ai-warn strong { color: var(--changed) }
+.alts { display: grid; gap: 8px }
+.alts div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--line) }
+.alts span { color: var(--ink-2); font-size: 14px }
+.reqs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px }
+.req { display: inline-flex; gap: 8px; align-items: baseline; min-width: 0; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 13px; max-width: 100% }
+.req b { font: 600 11px var(--font-mono); color: var(--accent); white-space: nowrap; flex: none }
+
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between }
+.tabs { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 5px; flex-wrap: wrap }
+.tab { border: 0; background: transparent; border-radius: 8px; padding: 8px 14px; cursor: pointer; display: grid; gap: 1px; text-align: left; min-height: 44px }
+.tab .t { font: 700 16px var(--font-display) }
+.tab .l { font: 11px var(--font-mono); color: var(--ink-2) }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink) }
+.tab[aria-selected="true"] .l { color: inherit; opacity: .85 }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; min-height: 32px }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent) }
+
+.tier-head { display: grid; gap: 4px }
+.tier-head p { max-width: 85ch }
+
+.canvas-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow-x: auto; box-shadow: var(--shadow) }
+.canvas-fit { position: relative; margin: 0 auto }
+.canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0 }
+.lane { position: absolute; top: 12px; bottom: 12px; border-radius: 12px; background: var(--lane) }
+.lane-head { position: absolute; top: 22px; display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.lane-head i { width: 8px; height: 8px; border-radius: 50% }
+svg.wires { position: absolute; inset: 0; overflow: visible; pointer-events: none }
+.wire { fill: none; stroke: var(--wire); stroke-width: 1.6; transition: opacity .15s, stroke .15s }
+.wire.sync { stroke-dasharray: 7 5 }
+.wire.async { stroke-dasharray: 2 6; stroke-linecap: round; stroke-width: 2.2 }
+.wire-label rect { fill: var(--surface); stroke: var(--line) }
+.wire-label text { fill: var(--ink-2); font: 500 10.5px var(--font-mono) }
+@media (prefers-reduced-motion: no-preference) {
+  .wire.sync { animation: flow 1.4s linear infinite }
+  .wire.async { animation: flow 2.2s linear infinite }
+  @keyframes flow { to { stroke-dashoffset: -24 } }
+}
+
+.node { position: absolute; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; box-shadow: var(--shadow);
+  transition: transform .15s, opacity .15s, border-color .15s }
+.node:hover { border-color: var(--accent); transform: translateY(-2px) }
+.node .ic { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center }
+.node .ic svg { width: 24px; height: 24px }
+.node .nm { font: 600 14px/1.25 var(--font-body); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere }
+.node .tc { font: 11px/1.35 var(--font-mono); color: var(--ink-2); margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.node .st { z-index: 1; position: absolute; top: -9px; right: 10px; font: 700 9.5px var(--font-mono); letter-spacing: .08em; padding: 3px 7px; border-radius: 99px; color: var(--surface) }
+.node.new { border-color: var(--new); box-shadow: 0 0 0 3px color-mix(in srgb, var(--new) 22%, transparent), var(--shadow) }
+.node.new .st { background: var(--new) }
+.node.changed { border-color: var(--changed) }
+.node.changed .st { background: var(--changed) }
+.node.removed { border-style: dashed; opacity: .6 }
+.node.removed .st { background: var(--removed) }
+.node.removed .nm { text-decoration: line-through }
+.canvas.hovering .node:not(.hot), .canvas.only-changes:not(.baseline) .node.same { opacity: .32 }
+.canvas.hovering .wire:not(.hot), .canvas.hovering .wire-label:not(.hot) { opacity: .15 }
+.canvas.hovering .wire.hot { stroke: var(--accent) }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 20px; font-size: 12.5px; color: var(--ink-2); padding: 0 4px }
+.legend span { display: inline-flex; align-items: center; gap: 8px }
+.legend svg { width: 34px; height: 8px }
+
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 18px }
+.card.wide { grid-column: 1 / -1 }
+.card li, .card p, .m-body, .m-head h3 { overflow-wrap: anywhere }
+.profile { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px }
+.prof { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere }
+.prof .v { font: 600 14.5px/1.3 var(--font-body) }
+.prof .d { font-size: 13px; color: var(--ink-2) }
+.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px/1.45 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; border: 1px solid currentColor; max-width: 100% }
+.src.repo { color: var(--z-edge-ink) } .src.brief { color: var(--z-client-ink) } .src.user { color: var(--new) } .src.inferred { color: var(--changed) } .src.unknown { color: var(--removed) }
+.driver { font-size: 13px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0 }
+.moves, .rejected { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px }
+.moves li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--changed) }
+.rejected li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--line) }
+.trigger { font: 12px var(--font-mono); color: var(--ink-2) }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2) }
+td.num { font: 13px var(--font-mono); font-variant-numeric: tabular-nums }
+td.cur { color: var(--accent); font-weight: 600 }
+.tablewrap { overflow-x: auto }
+
+dialog { border: 1px solid var(--line); border-radius: 18px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(0, 0, 0, .28) }
+dialog::backdrop { background: rgba(8, 12, 18, .5) }
+.m-head { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 20px 20px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface) }
+.m-head .ic { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center }
+.m-head .ic svg { width: 30px; height: 30px }
+.m-tech { font: 12px var(--font-mono); color: var(--ink-2); margin-top: 4px }
+.close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; display: grid; place-items: center }
+.close svg { width: 18px; height: 18px }
+.m-body { padding: 18px 20px 22px; display: grid; gap: 18px }
+.pills { display: flex; flex-wrap: wrap; gap: 8px }
+.pill { font: 600 11px var(--font-mono); letter-spacing: .06em; padding: 3px 9px; border-radius: 99px; border: 1px solid currentColor }
+.pill.new { color: var(--new) } .pill.changed { color: var(--changed) } .pill.same { color: var(--ink-2) } .pill.removed { color: var(--removed) }
+.sec { display: grid; gap: 6px }
+.sec h4 { margin: 0; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.sec ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.serves { display: grid; gap: 6px }
+.serves div { background: var(--surface-2); border-radius: 8px; padding: 7px 10px; font-size: 14px }
+.serves b { font: 600 11px var(--font-mono); color: var(--accent); margin-right: 8px; white-space: nowrap }
+.fail { display: grid; gap: 8px }
+.fail div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--removed) }
+.fail span { color: var(--ink-2); font-size: 14px }
+.next { background: var(--surface-2); border-radius: 10px; padding: 12px; display: grid; gap: 4px }
+.conns { display: flex; flex-wrap: wrap; gap: 8px }
+.conn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer; min-height: 32px }
+.conn:hover { border-color: var(--accent) }
+</style>
+
+<div class="wrap">
+  <aside class="ai-warn" role="note"><strong>AI-generated suggestion.</strong> This design was drafted by an AI agent from the project context and the answers it was given. Numbers, costs and vendor limits are estimates. Treat it as a starting point for discussion: verify every choice against current vendor docs and your own measurements before acting on it.</aside>
+  <header>
+    <div class="eyebrow">System design · <span id="stack"></span></div>
+    <h1 id="title"></h1>
+    <p class="muted" id="problem" style="max-width:80ch"></p>
+    <div class="reqs" id="reqs"></div>
+  </header>
+
+  <section style="display:grid;gap:10px" aria-labelledby="prof-h">
+    <h2 id="prof-h">Workload profile <span class="muted" style="font:400 13px var(--font-body)">what drives the design at every tier</span></h2>
+    <div class="profile" id="profile"></div>
+  </section>
+
+  <div class="bar">
+    <div class="tabs" role="tablist" aria-label="Traffic tier" id="tabs"></div>
+    <label class="toggle"><input type="checkbox" id="only" checked> Highlight what changed</label>
+  </div>
+
+  <section class="tier-head" aria-live="polite">
+    <h2 id="tier-title" style="font-size:22px"></h2>
+    <p class="muted" id="tier-summary"></p>
+  </section>
+
+  <div class="canvas-wrap" id="cwrap"><div class="canvas-fit" id="cfit"><div class="canvas only-changes" id="canvas"></div></div></div>
+  <div class="legend" id="legend"></div>
+
+  <div class="grid3">
+    <section class="card"><h2>Recommended moves</h2><ul class="moves" id="moves"></ul></section>
+    <section class="card"><h2>Considered and left out</h2><ul class="rejected" id="rejected"></ul></section>
+    <section class="card wide"><h2>Load assumptions</h2><p class="muted" id="load-note" style="font-size:13.5px"></p><div class="tablewrap"><table id="load"></table></div></section>
+  </div>
+</div>
+
+<dialog id="modal" aria-labelledby="m-name"></dialog>
+
+<script>
+/* Replace only this object for a new design. Every node must name the requirements it serves.
+   zone: one of DESIGN.zones ids (the column). row: 0-based row inside the zone.
+   status: new | changed | same | removed. icon: a key of ICONS below. */
+const DESIGN = {
+  "title": "Team Chat System Design",
+  "stack": "Elixir (Phoenix) on Fly.io · Postgres · S3-compatible storage",
+  "problem": "A team chat app for companies. Members talk in channels and direct messages, see who is online and who is typing, get unread counts and mobile push notifications, search the full message history and share files. Each company is a workspace with its own members and admins, from 3 people to 100k. Every message fans out to everyone in its channel (typically 20 members, up to 50k), must appear in the same order for everyone, and must never be lost once the sender sees it sent. The system starts at 1k daily active members and must have a credible path to 10M, global from 100k and with optional EU data residency from 1M.",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "Channels and DMs: same order for everyone, no message lost after the sender sees it sent"
+    },
+    {
+      "id": "R2",
+      "text": "See who is online and who is typing"
+    },
+    {
+      "id": "R3",
+      "text": "Unread counts and push notifications on mobile"
+    },
+    {
+      "id": "R4",
+      "text": "Search across all message history"
+    },
+    {
+      "id": "R5",
+      "text": "Share files"
+    },
+    {
+      "id": "R6",
+      "text": "Workspaces with their own members and admins, from 3 to 100k members"
+    },
+    {
+      "id": "R7",
+      "text": "Messages and typing arrive in under 300 ms"
+    },
+    {
+      "id": "R8",
+      "text": "Global from 100k DAU, EU data residency for enterprise from 1M DAU"
+    },
+    {
+      "id": "R9",
+      "text": "Messages kept forever unless the workspace sets a retention policy"
+    }
+  ],
+  "profile": [
+    {
+      "label": "Read to write ratio",
+      "value": "Write-multiplying: 1 message in, about 20 live deliveries out. History reads on scroll-back and search are the minority.",
+      "source": "user",
+      "drives": "Cost and load are set by fan-out deliveries per second, not by writes per second. Unread must not write one row per recipient."
+    },
+    {
+      "label": "Connection model",
+      "value": "Two-way persistent (WebSocket), about 8 hours per day per member",
+      "source": "user",
+      "drives": "Concurrent sockets are the first limit. Needs a gateway, a pub/sub backplane and resync from a cursor on reconnect."
+    },
+    {
+      "label": "Freshness",
+      "value": "Messages and typing under 300 ms. Presence may lag a few seconds.",
+      "source": "user",
+      "drives": "Rules out polling. Lets presence be batched while typing stays immediate."
+    },
+    {
+      "label": "Tenancy",
+      "value": "Multi-tenant pooled, workspaces from 3 to 100k members",
+      "source": "user",
+      "drives": "Workspace is the natural partition, shard and residency key."
+    },
+    {
+      "label": "Tenant and key skew",
+      "value": "A few very large workspaces; largest channel 50k members",
+      "source": "user",
+      "drives": "Hot channels and noisy neighbours: per-channel limits now, dedicated cells for the biggest workspaces later."
+    },
+    {
+      "label": "Traffic shape",
+      "value": "Office hours per time zone, Monday-morning peak about 3x, all-hands announcements cause instant fan-out spikes",
+      "source": "user",
+      "drives": "Size for 3x the daily average, absorb push bursts in a queue, shed and jitter reconnects."
+    },
+    {
+      "label": "Spike stacking",
+      "value": "All-hands burst is one message fanned out to up to 25k online members on top of the 3x peak",
+      "source": "inferred",
+      "drives": "Modelled as deliveries per message, not as a multiplier on the peak rate. Flips if all-hands run in many workspaces at once."
+    },
+    {
+      "label": "Latency budget",
+      "value": "Send to deliver under 300 ms p95 (main path). History read p95 under 500 ms.",
+      "source": "user",
+      "drives": "The 300 ms figure is given. The history figure is inferred. Cross-ocean write round trips do not fit, so writes are homed near members."
+    },
+    {
+      "label": "Consistency per path",
+      "value": "Strong per channel: one order, durable at ack. Eventual: unread counts, presence, search index.",
+      "source": "user",
+      "drives": "Per-channel sequence number assigned in the commit, ack after synchronous replication. Counts, presence and search may lag."
+    },
+    {
+      "label": "Geography",
+      "value": "One region to 10k DAU, global from 100k DAU, EU residency option from 1M DAU",
+      "source": "user",
+      "drives": "Workspace home region from 100k. The same key later enforces residency."
+    },
+    {
+      "label": "Regional split",
+      "value": "Busiest region carries about 50% of load",
+      "source": "inferred",
+      "drives": "Per-region sizing uses 50% of the global rate. Flips to a larger share if signups concentrate in one region."
+    },
+    {
+      "label": "Data rules",
+      "value": "Kept forever unless the workspace sets a policy. EU residency for enterprise.",
+      "source": "user",
+      "drives": "Retention needs a delete path through DB, archive and search index. Residency pins every store, not just the DB."
+    },
+    {
+      "label": "Data growth",
+      "value": "40 messages per member per day at an assumed 0.5 KB each; files at an assumed 0.2 per member per day and 1 MB each",
+      "source": "inferred",
+      "drives": "Message rate is given; sizes are assumed. Sets partitioning at 100k and cold archive at 10M. Flips if files are bigger or messages carry rich content."
+    },
+    {
+      "label": "Background work",
+      "value": "Push notifications, search indexing and file handling",
+      "source": "brief",
+      "drives": "Queue and worker isolation from socket traffic. Push volume is the first burst that needs a broker."
+    },
+    {
+      "label": "Team and cost",
+      "value": "Team of 8, Elixir on Fly.io",
+      "source": "user",
+      "drives": "Few moving parts. Prefer Postgres, the BEAM and Fly primitives over new systems until a measured trigger fires."
+    }
+  ],
+  "zones": [
+    {
+      "id": "client",
+      "label": "Clients"
+    },
+    {
+      "id": "edge",
+      "label": "Edge and routing"
+    },
+    {
+      "id": "app",
+      "label": "Chat runtime"
+    },
+    {
+      "id": "data",
+      "label": "Data"
+    },
+    {
+      "id": "services",
+      "label": "Async and delivery"
+    }
+  ],
+  "load": {
+    "note": "Inputs: 40 messages per member per day, so average rate = DAU x 40 / 86,400. Peak = average x 3 (Monday morning). Live deliveries = peak messages x 20 (typical channel; an upper bound, since not every member is online). Sockets at peak = DAU x 50% online (8 h of 24 is 33% on average, 50% assumed at the Monday peak, inferred) x 1 socket. Per-region figures use the busiest region at 50% (inferred). Stored bytes assume 0.5 KB per message and 0.2 files of 1 MB per member per day (inferred).",
+    "rows": [
+      "Messages per second, avg → peak",
+      "Live deliveries per second at peak",
+      "Concurrent sockets at peak",
+      "All-hands burst, deliveries per message",
+      "Messages stored per year",
+      "File storage added per year",
+      "Regions",
+      "p95 send to deliver, availability"
+    ],
+    "values": {
+      "x1": [
+        "0.5 → 1.4",
+        "28",
+        "500",
+        "500 (workspace up to 1k members)",
+        "14.6M (about 7 GB)",
+        "73 GB",
+        "1",
+        "300 ms, 99.5% (inferred)"
+      ],
+      "x10": [
+        "4.6 → 14",
+        "280",
+        "5k",
+        "5k",
+        "146M (about 73 GB)",
+        "730 GB",
+        "1",
+        "300 ms, 99.5% (inferred)"
+      ],
+      "x100": [
+        "46 → 139",
+        "2.8k",
+        "50k (busiest region 25k)",
+        "25k (a 50k channel, half online)",
+        "1.5B (about 730 GB)",
+        "7.3 TB",
+        "3 (US, EU, APAC)",
+        "300 ms home region, 99.9%"
+      ],
+      "x1000": [
+        "463 → 1.4k",
+        "28k",
+        "500k (busiest region 250k)",
+        "25k, plus a 100k-member workspace",
+        "14.6B (about 7.3 TB)",
+        "73 TB",
+        "3, plus an EU residency data plane",
+        "300 ms, 99.9%"
+      ],
+      "x10000": [
+        "4.6k → 13.9k",
+        "278k",
+        "5M (busiest region 2.5M)",
+        "25k each, several workspaces at once",
+        "146B (about 73 TB)",
+        "730 TB",
+        "3 regions, about 12 cells",
+        "300 ms, 99.95% per cell"
+      ]
+    }
+  },
+  "tiers": [
+    {
+      "id": "x1",
+      "label": "1x",
+      "short": "1k DAU",
+      "title": "1k DAU: one Phoenix cluster, Postgres is the truth",
+      "summary": "500 sockets and 28 live deliveries per second at peak fit on two small Phoenix machines in one region. Postgres is the single source of truth: it assigns each channel's sequence number, holds messages, read cursors, jobs and, for now, the full-text search index. Phoenix PubSub fans out and Oban sends push, so there is no extra system to run for a team of 8.",
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Web and mobile apps",
+          "tech": "Browser + iOS/Android over WebSocket",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "same",
+          "role": "Web and mobile apps hold one WebSocket per device, join the topics for their channels and send a last seen sequence number per channel on join so the server replays what they missed.",
+          "specifics": [
+            "One socket per device, one topic per channel and per workspace presence",
+            "Optimistic send with a client message id; the server ack carries the channel sequence number",
+            "Presigned PUT straight to object storage for files",
+            "Reconnect with exponential backoff and jitter, then resync from the cursor"
+          ],
+          "tradeoffs": [
+            "Resync-from-cursor on every join costs one query per channel, which is fine at 1k and needs care at 1M"
+          ],
+          "failures": [
+            {
+              "mode": "Socket drops mid-send",
+              "mitigation": "Client retries with the same client message id; the insert is idempotent on (channel, client id), so no duplicate and no loss"
+            }
+          ],
+          "breaks": "Reconnect storms after a deploy or a region blip once sockets reach tens of thousands.",
+          "trigger": "More than 20% of sockets reconnecting within a minute.",
+          "cost": "n/a",
+          "alternatives": "No direct alternative: web and mobile clients are required by the brief. Long polling and SSE were ruled out by the sub-300 ms two-way requirement on typing."
+        },
+        {
+          "id": "proxy",
+          "label": "Fly Proxy",
+          "tech": "Anycast, TLS, WebSocket upgrade",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R7"
+          ],
+          "status": "same",
+          "role": "Terminates TLS, accepts the WebSocket upgrade and routes to a healthy Phoenix machine.",
+          "specifics": [
+            "Connection and concurrency soft limits set per Fly app (to verify against current Fly docs)",
+            "Health check on the Phoenix endpoint, rolling deploys one machine at a time"
+          ],
+          "tradeoffs": [
+            "No sticky sessions needed: every socket resyncs from a cursor, so any machine can serve any member"
+          ],
+          "failures": [
+            {
+              "mode": "Machine fails health check",
+              "mitigation": "Proxy stops routing to it; clients reconnect to the other machine and resync"
+            }
+          ],
+          "breaks": "Routing to the nearest region is not enough once members are global and the writer lives in one place.",
+          "trigger": "More than 20% of DAU outside the first region.",
+          "cost": "Included in machine cost",
+          "alternatives": "No direct alternative: it is part of the hosting platform. A separate load balancer in front of Fly would add a hop and no capability at this size."
+        },
+        {
+          "id": "chat",
+          "label": "Chat app (Phoenix)",
+          "tech": "Phoenix Channels, 2 machines, 1 region",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R6",
+            "R7",
+            "R9"
+          ],
+          "status": "same",
+          "role": "One Phoenix release serves sockets, the HTTP API, presence and Oban. A send is one transaction: bump the channel's last_seq, insert the message with that seq, insert the push and index jobs, commit, broadcast on PubSub, then ack the sender.",
+          "specifics": [
+            "Ack after commit: with ANY 1 of 2 synchronous standbys, an acked message is on two hosts",
+            "Order is the channel's seq. The UPDATE ... RETURNING on the channel row serialises writers per channel",
+            "Unread count = channel last_seq minus the member's last_read_seq. Sending writes nothing per recipient",
+            "Presence with Phoenix.Presence per workspace topic. Typing is a PubSub event, never stored, throttled to one per 3 s per member",
+            "Membership is checked in join/3 for every topic, not only at connect",
+            "Phoenix.PubSub across machines over Fly private networking using DNSCluster"
+          ],
+          "tradeoffs": [
+            "One release is the cheapest thing to run. The cost is that a push or index burst shares a node with sockets",
+            "Per-channel row lock is simple and correct. It caps one channel at roughly 1k messages per second, far above need"
+          ],
+          "failures": [
+            {
+              "mode": "Broadcast after commit is lost (node crash)",
+              "mitigation": "Events are hints. Receivers resync from their cursor on the next join or on a seq gap"
+            },
+            {
+              "mode": "Both standbys down",
+              "mitigation": "Writes block rather than ack unsafely. Page on call; failing closed is the requirement"
+            }
+          ],
+          "breaks": "Background work shares CPU with sockets, and a deploy drops every socket on the node.",
+          "trigger": "Oban queue depth above 1k while broadcast p95 climbs.",
+          "cost": "~$30/mo est. (2 shared machines at an assumed ~$15 each, unverified)",
+          "alternatives": [
+            {
+              "what": "Node.js with Socket.IO",
+              "why": "Needs a Redis adapter to span machines and has no built-in presence. The team chose Elixir."
+            },
+            {
+              "what": "Hosted realtime service",
+              "why": "Per-message pricing scales with fan-out (278k deliveries per second at 10M) and authorization would live outside Postgres membership."
+            },
+            {
+              "what": "Serverless functions with SSE",
+              "why": "One-way only and function duration limits; typing needs client to server at low latency."
+            }
+          ]
+        },
+        {
+          "id": "db",
+          "label": "Postgres home primary",
+          "tech": "Postgres, primary + 2 sync standbys",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R3",
+            "R4",
+            "R6",
+            "R9"
+          ],
+          "status": "same",
+          "role": "Source of truth for messages, channel sequence numbers, read cursors, workspaces, members, jobs and, at this size, the full-text index.",
+          "specifics": [
+            "messages(workspace_id, channel_id, seq, id, sender_id, body, created_at), unique (channel_id, seq) and (channel_id, client_msg_id)",
+            "Full-text search as a tsvector column with a GIN index, filtered by workspace_id",
+            "synchronous_commit on, synchronous_standby_names = ANY 1 (s1, s2)",
+            "Every query carries workspace_id; row-level security as the second guard for tenant isolation",
+            "Ecto pool of 20 per machine, about 40 connections in total"
+          ],
+          "tradeoffs": [
+            "Sync replication adds a few milliseconds to every send and makes writes depend on one standby being up",
+            "Search in the primary is free to run and shares its CPU"
+          ],
+          "failures": [
+            {
+              "mode": "Primary lost",
+              "mitigation": "Promote the synced standby. No acked message is lost because it was flushed on a standby"
+            },
+            {
+              "mode": "Cross-tenant read from a missing filter",
+              "mitigation": "RLS policy on workspace_id and an integration test per query path"
+            }
+          ],
+          "breaks": "History and search reads compete with the write path, and the table grows without bound.",
+          "trigger": "Primary CPU above 60% sustained, or search p95 above 800 ms.",
+          "cost": "~$90/mo est. (3 machines at an assumed ~$15 plus volumes, unverified)",
+          "alternatives": [
+            {
+              "what": "Async replication only",
+              "why": "A failover could lose messages the sender already saw as sent, which R1 forbids."
+            },
+            {
+              "what": "A document or wide-column store",
+              "why": "Order, transactions and tenant constraints are simpler in Postgres, and the team already runs it. Exit cost is high, so the choice matters."
+            },
+            {
+              "what": "Postgres plus a separate message log (Kafka)",
+              "why": "Two sources of truth to reconcile, with one consumer at this size."
+            }
+          ]
+        },
+        {
+          "id": "files",
+          "label": "Object storage",
+          "tech": "S3-compatible bucket, presigned URLs",
+          "icon": "storage",
+          "zone": "data",
+          "row": 1,
+          "serves": [
+            "R5"
+          ],
+          "status": "same",
+          "role": "Holds uploaded files. The app issues presigned PUT and GET URLs after a membership check; bytes never pass through Phoenix.",
+          "specifics": [
+            "Key: workspace_id/channel_id/file_id",
+            "Presigned URL expiry 5 minutes, content-length limit set in the policy",
+            "Metadata row in Postgres references the object"
+          ],
+          "tradeoffs": [
+            "Direct upload keeps sockets free of file bytes. A completed upload and the message that references it are two steps, so a message can briefly point at an upload still in flight"
+          ],
+          "failures": [
+            {
+              "mode": "Upload abandoned",
+              "mitigation": "Lifecycle rule deletes objects with no metadata row after 24 hours"
+            }
+          ],
+          "breaks": "Residency and read latency once members are global.",
+          "trigger": "Files read across an ocean or a residency requirement.",
+          "cost": "~$2/mo est. (73 GB per year at an assumed $0.02/GB-month, unverified)",
+          "alternatives": [
+            {
+              "what": "Store files in Postgres",
+              "why": "Bloats the primary and its backups for no benefit."
+            },
+            {
+              "what": "Proxy uploads through Phoenix",
+              "why": "Ties up sockets and memory with large bodies."
+            }
+          ]
+        },
+        {
+          "id": "jobs",
+          "label": "Job workers (Oban)",
+          "tech": "Oban on Postgres, inside the app release",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "serves": [
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "same",
+          "role": "Runs push, file post-processing and search jobs. A job is inserted in the same transaction as its message, so it exists if and only if the message committed (a transactional outbox).",
+          "specifics": [
+            "Queues: push (limit 20), default (limit 10)",
+            "Push only for offline members, per notification settings, mentions and DMs first",
+            "Retries with backoff, dead-letter after 10 attempts"
+          ],
+          "tradeoffs": [
+            "No new infrastructure. Each job is three row writes on the primary"
+          ],
+          "failures": [
+            {
+              "mode": "Push provider returns an error",
+              "mitigation": "Retry with backoff for 5xx. Drop and delete the device token on an invalid-token reply"
+            }
+          ],
+          "breaks": "Job writes compete with message writes, and a big channel's push burst starves other work.",
+          "trigger": "Oban queue depth above 1k, or push latency above 5 s.",
+          "cost": "Inside the app machines",
+          "alternatives": [
+            {
+              "what": "A broker (NATS, Kafka, SQS)",
+              "why": "Another system to run for a few jobs per second; the outbox in Postgres gives exactly-once enqueue."
+            },
+            {
+              "what": "Fire-and-forget Task.Supervisor",
+              "why": "Lost on a crash, which loses push for acked messages."
+            }
+          ]
+        },
+        {
+          "id": "push",
+          "label": "APNs and FCM",
+          "tech": "Apple and Google push gateways",
+          "icon": "mail",
+          "zone": "services",
+          "row": 1,
+          "serves": [
+            "R3"
+          ],
+          "status": "same",
+          "role": "Delivers notifications to offline members through Apple and Google gateways.",
+          "specifics": [
+            "Device tokens stored per member and platform",
+            "Collapse key per channel so repeated pushes replace each other"
+          ],
+          "tradeoffs": [
+            "Third-party delivery is best effort and not ordered"
+          ],
+          "failures": [
+            {
+              "mode": "Gateway outage",
+              "mitigation": "Jobs retry; unread counts in the app are correct on next open"
+            }
+          ],
+          "breaks": "Provider rate limits during all-hands pushes.",
+          "trigger": "HTTP 429 from either provider.",
+          "cost": "Free from the providers",
+          "alternatives": "No direct alternative: Apple and Google push are the only routes to iOS and Android devices."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "proxy",
+          "label": "WSS, HTTPS"
+        },
+        {
+          "from": "proxy",
+          "to": "chat",
+          "label": "WS upgrade"
+        },
+        {
+          "from": "chat",
+          "to": "db",
+          "label": "SQL"
+        },
+        {
+          "from": "chat",
+          "to": "files",
+          "label": "presign"
+        },
+        {
+          "from": "jobs",
+          "to": "db",
+          "label": "dequeue",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "push",
+          "label": "notify",
+          "async": true
+        }
+      ],
+      "moves": [
+        {
+          "what": "Baseline: one Phoenix cluster, Postgres as the only store",
+          "why": "Sequence per channel and ack after a synchronous commit give R1; PubSub and a cursor resync give R7; unread by sequence arithmetic avoids per-recipient writes; Oban in the same transaction gives push without a broker; Postgres full-text covers 14.6M messages per year.",
+          "driver": "Connection model (500 sockets), Consistency per path, 28 deliveries per second",
+          "trigger": "n/a"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "OpenSearch from day one",
+          "why": "14.6M messages per year fit a GIN index. A second cluster is on-call load for a team of 8 with no measured need."
+        },
+        {
+          "what": "Redis for pub/sub and presence",
+          "why": "Phoenix.PubSub and Presence already do this inside the BEAM. Redis would add a hop and a store."
+        },
+        {
+          "what": "Kafka as the message log",
+          "why": "One consumer at 1.4 messages per second. Postgres already is the log."
+        },
+        {
+          "what": "Multi-region from the start",
+          "why": "All 1k members are assumed to be in one geography; global starts at 100k DAU."
+        },
+        {
+          "what": "Stay on Fly.io (platform fit)",
+          "why": "Anycast routing, private networking for Erlang clustering and WebSocket-friendly proxying are what this app needs. Moving to managed Kubernetes would add work for no gain at 500 sockets."
+        }
+      ]
+    },
+    {
+      "id": "x10",
+      "label": "10x",
+      "short": "10k DAU",
+      "title": "10k DAU: workers and replica split from the sockets",
+      "summary": "5k sockets and 280 live deliveries per second still fit the same design. What changes is isolation: push and file jobs move to their own machines so a burst cannot slow broadcasts, history and search reads move to a replica, and deploys drain sockets gracefully. The sequence, the ack rule and the cursor resync are unchanged.",
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Web and mobile apps",
+          "tech": "Browser + iOS/Android over WebSocket",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "proxy",
+          "label": "Fly Proxy",
+          "tech": "Anycast, TLS, WebSocket upgrade",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R7"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "chat",
+          "label": "Chat app (Phoenix)",
+          "tech": "Phoenix, 3 machines, drain on deploy",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R6",
+            "R7",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "Same release, now only serving sockets and the API. Deploys drain connections in batches and clients reconnect with jitter.",
+          "specifics": [
+            "Rolling deploy: stop accepting joins, push a reconnect hint, close 10% of sockets per 10 s",
+            "Resync reads history from the replica, but only the send path uses the primary",
+            "Typing capped at one event per 3 s per member and 5 per second per channel"
+          ],
+          "tradeoffs": [
+            "Slower deploys in exchange for no reconnect spike"
+          ],
+          "failures": [
+            {
+              "mode": "Replica lag shows a stale resync",
+              "mitigation": "Resync passes the client's last_seq; if the replica is behind that seq, read from the primary"
+            }
+          ],
+          "breaks": "Cross-ocean latency for members far from the single region.",
+          "trigger": "More than 20% of DAU outside the first region.",
+          "cost": "~$90/mo est. (3 machines at an assumed ~$30, unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Postgres home primary",
+          "tech": "Postgres, primary + 2 sync standbys",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R3",
+            "R4",
+            "R6",
+            "R9"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "files",
+          "label": "Object storage",
+          "tech": "S3-compatible bucket, presigned URLs",
+          "icon": "storage",
+          "zone": "data",
+          "row": 1,
+          "serves": [
+            "R5"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "replica",
+          "label": "Postgres read replica",
+          "tech": "Streaming replica for history and search",
+          "icon": "database",
+          "zone": "data",
+          "row": 2,
+          "serves": [
+            "R1",
+            "R4",
+            "R9"
+          ],
+          "status": "new",
+          "role": "Serves scroll-back history, resync and search so reads stop competing with sends on the primary.",
+          "specifics": [
+            "Async streaming replica, separate from the two sync standbys",
+            "Reads that follow the user's own write go to the primary",
+            "hot_standby_feedback off, max_standby_streaming_delay 30 s so long search queries are not cancelled constantly"
+          ],
+          "tradeoffs": [
+            "Replication lag: a message can be missing from history for a moment. Resync uses the seq check above."
+          ],
+          "failures": [
+            {
+              "mode": "Replica far behind",
+              "mitigation": "Alert at 5 s lag; the app routes all reads to the primary until it recovers"
+            }
+          ],
+          "breaks": "A single replica cannot hold search over a billion rows.",
+          "trigger": "Search p95 above 1 s on the replica, or its GIN index larger than RAM.",
+          "cost": "~$30/mo est. (1 machine at an assumed ~$30 plus volume, unverified)",
+          "alternatives": [
+            {
+              "what": "Tune the primary only",
+              "why": "Search and scroll-back would keep competing with sends, which are the latency-critical path."
+            },
+            {
+              "what": "PgBouncer with replica routing",
+              "why": "About 60 connections in total; the Ecto pool is enough."
+            }
+          ]
+        },
+        {
+          "id": "jobs",
+          "label": "Worker machines (Oban)",
+          "tech": "Separate Fly process group, same release",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "serves": [
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "changed",
+          "role": "Oban now runs on dedicated machines, so push and file jobs cannot take CPU from sockets.",
+          "specifics": [
+            "Process group: web vs worker, same image, different start command",
+            "Push queue concurrency 50, per-provider rate limit",
+            "Workers scale on queue depth"
+          ],
+          "tradeoffs": [
+            "One more machine group to size. Still one codebase and one deploy."
+          ],
+          "failures": [
+            {
+              "mode": "Worker group down",
+              "mitigation": "Jobs wait in Postgres; messages and live delivery are unaffected. Alert on queue age"
+            }
+          ],
+          "breaks": "At 100k, job writes become a visible share of primary load and an all-hands push burst reaches 25k.",
+          "trigger": "Push queue depth above 10k.",
+          "cost": "~$30/mo est. (1 to 2 machines, unverified)"
+        },
+        {
+          "id": "push",
+          "label": "APNs and FCM",
+          "tech": "Apple and Google push gateways",
+          "icon": "mail",
+          "zone": "services",
+          "row": 1,
+          "serves": [
+            "R3"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "proxy",
+          "label": "WSS, HTTPS"
+        },
+        {
+          "from": "proxy",
+          "to": "chat",
+          "label": "WS upgrade"
+        },
+        {
+          "from": "chat",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "chat",
+          "to": "replica",
+          "label": "history"
+        },
+        {
+          "from": "chat",
+          "to": "files",
+          "label": "presign"
+        },
+        {
+          "from": "db",
+          "to": "replica",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "db",
+          "label": "dequeue",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "push",
+          "label": "notify",
+          "async": true
+        }
+      ],
+      "moves": [
+        {
+          "what": "Run Oban on its own worker machines",
+          "why": "Push and file jobs share CPU with sockets today. Splitting them keeps broadcast latency flat when a large channel posts.",
+          "driver": "Background work and Traffic shape: 280 deliveries per second at a 3x Monday peak",
+          "trigger": "Broadcast p95 above 150 ms while Oban queue depth is above 1k"
+        },
+        {
+          "what": "Add a streaming read replica for history, resync and search",
+          "why": "146M messages per year (about 73 GB) kept forever and searched in full; reads should not queue behind sends.",
+          "driver": "Data rules (kept forever, search all history) and Data growth",
+          "trigger": "Primary CPU above 60% sustained, or search p95 above 800 ms"
+        },
+        {
+          "what": "Drain sockets on deploy and reconnect with jitter and cursor resync",
+          "why": "5k sockets reconnecting at once would stack resync queries on the primary.",
+          "driver": "Connection model and Consistency per path (no message lost, same order)",
+          "trigger": "Reconnect spike above 20% of sockets in one minute"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Fly.io (platform fit)",
+          "why": "5k sockets is a small load for the BEAM on a few machines, and Fly's private network already clusters them. Nothing here is platform-limited."
+        },
+        {
+          "what": "Stay on Postgres full-text search",
+          "why": "Kept: 146M rows still fit a GIN index with a replica. Revisit at 100k when it is about 1.5B rows per year."
+        },
+        {
+          "what": "Move channel ordering into in-memory processes",
+          "why": "A row lock handles 14 messages per second. An in-memory owner per channel adds failure handling for no need."
+        },
+        {
+          "what": "Kafka between the app and workers",
+          "why": "Oban in the same transaction gives an exactly-once enqueue. A broker earns its place when job writes hurt the primary."
+        },
+        {
+          "what": "Dedicated search cluster",
+          "why": "A replica removes the contention. An extra cluster is not yet justified by 73 GB of messages."
+        }
+      ]
+    },
+    {
+      "id": "x100",
+      "label": "100x",
+      "short": "100k DAU",
+      "title": "100k DAU: workspace home regions, own search, batched presence",
+      "summary": "Global members and the 300 ms budget break the single writer: a send from APAC to a US primary spends most of the budget on the round trip. Each workspace gets a home region with its own Phoenix cluster and Postgres, and sockets are routed there. Search, presence and the messages table each hit a size limit and get their own answer.",
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Web and mobile apps",
+          "tech": "Browser + iOS/Android over WebSocket",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "proxy",
+          "label": "Fly Proxy + replay",
+          "tech": "Anycast, fly-replay to the home region",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R7"
+          ],
+          "status": "changed",
+          "role": "Members connect to the nearest edge. The token carries the workspace's home region, and the app replays the request there, so every socket for a workspace lands in one cluster.",
+          "specifics": [
+            "Token claim: workspace_id, home region",
+            "Replay applies to the first HTTP request, including the WebSocket upgrade (to verify against Fly docs)",
+            "No cross-region Erlang mesh: one cluster per region"
+          ],
+          "tradeoffs": [
+            "A member far from their workspace's home pays the round trip once per hop. Same-region members stay under 300 ms; far members may see 300 to 450 ms (inferred)."
+          ],
+          "failures": [
+            {
+              "mode": "Home region unavailable",
+              "mitigation": "Clients show a quiet reconnecting state. Workspaces fail over to the standby in the same region; cross-region DR is a separate decision"
+            }
+          ],
+          "breaks": "A workspace spread across oceans still pays a long hop, and residency needs control of where data lives.",
+          "trigger": "More than 15% of a workspace's members outside its home region.",
+          "cost": "Egress ~$30 to 60/mo est. (about 1.4 TB per month at an assumed $0.02 to 0.04/GB, unverified)"
+        },
+        {
+          "id": "chat",
+          "label": "Chat app (Phoenix)",
+          "tech": "3 regional clusters, 3 to 8 machines each",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R6",
+            "R7",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "One Phoenix cluster per region serves the workspaces homed there. Typing is suppressed in very large channels.",
+          "specifics": [
+            "Busiest region: 25k sockets, about 1.4k deliveries per second at peak",
+            "Typing events off in channels above an assumed 200 members (product decision), rate-limited per channel below that",
+            "Sockets pinned to their home cluster; the cluster is a plain DNSCluster mesh of at most 8 nodes"
+          ],
+          "tradeoffs": [
+            "Three clusters to deploy and observe"
+          ],
+          "failures": [
+            {
+              "mode": "Monday 9am join storm in one region",
+              "mitigation": "Join and resync rate limits per node, with 429 and a client retry delay"
+            }
+          ],
+          "breaks": "A mesh over 30 nodes and one region's database size.",
+          "trigger": "A region cluster above 30 nodes.",
+          "cost": "~$600/mo est. (about 10 machines at an assumed ~$60, unverified)"
+        },
+        {
+          "id": "presence",
+          "label": "Presence service",
+          "tech": "ETS + 3 s batched diffs, watch lists",
+          "icon": "broadcast",
+          "zone": "app",
+          "row": 1,
+          "serves": [
+            "R2"
+          ],
+          "status": "new",
+          "role": "Replaces Phoenix.Presence. Clients send a heartbeat every 30 s; the service keeps last-seen in ETS and broadcasts changes in 3 s batches, only to members who are watching that person (their DMs, channel member list in view).",
+          "specifics": [
+            "Heartbeat 30 s, offline after 75 s",
+            "Flush every 3 s, one batched diff per watcher",
+            "Watch list limited to what is on screen, so a 50k channel never subscribes to 50k individuals"
+          ],
+          "tradeoffs": [
+            "Presence lags by up to 3 s plus the heartbeat window, which the brief allows"
+          ],
+          "failures": [
+            {
+              "mode": "Presence node crash",
+              "mitigation": "State rebuilds from the next heartbeats within 30 s; no durable state is lost"
+            }
+          ],
+          "breaks": "At the largest workspace, a single node's ETS and diff fan-out.",
+          "trigger": "Presence batch flush above 500 ms on a node.",
+          "cost": "Inside chat machines",
+          "alternatives": [
+            {
+              "what": "Phoenix.Presence for the whole workspace",
+              "why": "Every join and leave diffs to every subscriber. With 50k online in one topic that is on the order of N squared messages."
+            },
+            {
+              "what": "Presence in Postgres",
+              "why": "50k sockets heartbeating every 30 s is 1.7k writes per second of throwaway data on the primary."
+            },
+            {
+              "what": "Redis with TTL keys",
+              "why": "A second store and a hop, for presence that may lag seconds and that ETS holds fine."
+            }
+          ]
+        },
+        {
+          "id": "db",
+          "label": "Postgres home primary",
+          "tech": "Per region, monthly partitions, sync commit",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R3",
+            "R4",
+            "R6",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "Each region holds the workspaces homed there. Messages are range-partitioned by month.",
+          "specifics": [
+            "One primary and two sync standbys per region",
+            "messages partitioned by created_at month; new partitions created ahead by a job",
+            "Per-workspace retention deletes by partition drop where the policy allows, else row delete"
+          ],
+          "tradeoffs": [
+            "Cross-partition queries need the time bound. Scroll-back and search use channel_id plus a seq or time range."
+          ],
+          "failures": [
+            {
+              "mode": "Missing future partition",
+              "mitigation": "Job creates three months ahead and alerts when fewer than two exist"
+            }
+          ],
+          "breaks": "Outbox and job writes become a visible share of the primary.",
+          "trigger": "Oban queue writes above 25% of primary write IOPS.",
+          "cost": "~$600/mo est. (3 regions x 3 machines at an assumed ~$60 plus volumes, unverified)"
+        },
+        {
+          "id": "files",
+          "label": "Object storage",
+          "tech": "S3-compatible bucket, presigned URLs",
+          "icon": "storage",
+          "zone": "data",
+          "row": 1,
+          "serves": [
+            "R5"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "replica",
+          "label": "Postgres read replica",
+          "tech": "Streaming replica per region",
+          "icon": "database",
+          "zone": "data",
+          "row": 2,
+          "serves": [
+            "R1",
+            "R4",
+            "R9"
+          ],
+          "status": "same",
+          "role": "Unchanged, one per region.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "search",
+          "label": "Search (OpenSearch)",
+          "tech": "3 data nodes per region, routed by workspace",
+          "icon": "search",
+          "zone": "data",
+          "row": 3,
+          "serves": [
+            "R4",
+            "R8",
+            "R9"
+          ],
+          "status": "new",
+          "role": "Full-text index of every message, per region, with documents routed by workspace_id so one query touches one shard.",
+          "specifics": [
+            "Index per month, routing key workspace_id",
+            "Fed by index jobs from the outbox, bulk size 500, within seconds",
+            "Query always filtered by workspace_id and the member's channel ids",
+            "Delete path for retention policies"
+          ],
+          "tradeoffs": [
+            "Eventually consistent: a message is searchable seconds after it is sent",
+            "A new cluster to run in each region"
+          ],
+          "failures": [
+            {
+              "mode": "Index lags or a cluster is down",
+              "mitigation": "Search shows a degraded banner; messaging is unaffected. Backfill from Postgres by seq range"
+            }
+          ],
+          "breaks": "Disk cost of keeping every message hot.",
+          "trigger": "Hot tier above 60% disk.",
+          "cost": "~$1.2k/mo est. (3 regions x 3 nodes at an assumed ~$130, unverified)",
+          "alternatives": [
+            {
+              "what": "Keep Postgres full-text",
+              "why": "1.5B messages per year puts the GIN index well past replica RAM and ranking slows. Per-workspace filtering inside GIN is weak."
+            },
+            {
+              "what": "Typesense or a RAM-resident engine",
+              "why": "Index must live in memory; forever-retention at 730 GB per year of text is too costly."
+            },
+            {
+              "what": "Hosted search service",
+              "why": "Per-record pricing at billions of records, and residency control would sit with the vendor."
+            }
+          ]
+        },
+        {
+          "id": "jobs",
+          "label": "Job workers (Oban)",
+          "tech": "Oban per region: push, index and file jobs",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "serves": [
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "changed",
+          "role": "Workers per region run push, indexing and file jobs. Push is collapsed per channel, and large channels notify only on mention or DM.",
+          "specifics": [
+            "Push per-channel collapse key and a token bucket per provider",
+            "In big channels (above an assumed 500 members) only mentions and DMs push",
+            "Index jobs batch 500 per bulk request"
+          ],
+          "tradeoffs": [
+            "Collapsing and mention-only rules change what members see, so they need a product decision"
+          ],
+          "failures": [
+            {
+              "mode": "All-hands in a 50k channel",
+              "mitigation": "At most 25k offline members; the token bucket spreads sends across minutes instead of dropping them"
+            }
+          ],
+          "breaks": "Job writes on the primary at 1M.",
+          "trigger": "Push queue depth above 10k, or 429s from a provider.",
+          "cost": "~$200/mo est. (3 regions x 1 to 2 machines, unverified)"
+        },
+        {
+          "id": "push",
+          "label": "APNs and FCM",
+          "tech": "Apple and Google push gateways",
+          "icon": "mail",
+          "zone": "services",
+          "row": 1,
+          "serves": [
+            "R3"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "proxy",
+          "label": "WSS, HTTPS"
+        },
+        {
+          "from": "proxy",
+          "to": "chat",
+          "label": "to home"
+        },
+        {
+          "from": "chat",
+          "to": "presence",
+          "label": "heartbeats"
+        },
+        {
+          "from": "chat",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "chat",
+          "to": "replica",
+          "label": "history"
+        },
+        {
+          "from": "chat",
+          "to": "search",
+          "label": "query"
+        },
+        {
+          "from": "chat",
+          "to": "files",
+          "label": "presign"
+        },
+        {
+          "from": "db",
+          "to": "replica",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "db",
+          "label": "dequeue",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "search",
+          "label": "bulk index",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "push",
+          "label": "notify",
+          "async": true
+        }
+      ],
+      "moves": [
+        {
+          "what": "Give every workspace a home region with its own cluster and Postgres; route sockets there with fly-replay",
+          "why": "A single US writer puts APAC members about 150 to 250 ms from it (assumed). One round trip plus the return fan-out already spends the 300 ms budget. The workspace is the partition key and later the residency key.",
+          "driver": "Geography (global from 100k) and Latency budget (300 ms)",
+          "trigger": "Over 20% of DAU outside the first region, or p95 send-to-deliver above 300 ms for them"
+        },
+        {
+          "what": "Replace Phoenix.Presence with a batched presence service and watch lists",
+          "why": "Presence diffs grow with members squared in one workspace topic, and a 100k-member workspace has a 50k channel.",
+          "driver": "Connection model and Tenant skew (largest channel 50k); Freshness allows seconds of lag",
+          "trigger": "Presence diffs above 25% of PubSub traffic, or node CPU above 60% in a join storm"
+        },
+        {
+          "what": "Move search to OpenSearch, routed by workspace",
+          "why": "1.5B messages per year, searched across all history, outgrows a Postgres GIN index.",
+          "driver": "Data rules (search all history) and Data growth (730 GB per year)",
+          "trigger": "Search p95 above 1 s on the replica, or the GIN index above replica RAM"
+        },
+        {
+          "what": "Partition messages by month",
+          "why": "At 730 GB per year, vacuum, reindex and backups on one table take hours.",
+          "driver": "Data growth",
+          "trigger": "Messages table above 500 GB, or autovacuum or reindex above 1 hour"
+        },
+        {
+          "what": "Suppress typing in large channels and collapse push for all-hands",
+          "why": "One keystroke in a 50k channel is 25k deliveries. An all-hands message queues 25k pushes at once.",
+          "driver": "Tenant skew and Traffic shape (instant fan-out spikes)",
+          "trigger": "Typing above 30% of channel broadcasts, or push queue depth above 10k"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Fly.io (platform fit)",
+          "why": "Regional machines, anycast and replay cover three clusters. Per-app proxy connection limits for 25k sockets per region are well within what the platform supports (unverified, check current docs)."
+        },
+        {
+          "what": "One global primary with regional gateways",
+          "why": "Writes from APAC would cross the ocean (about 150 to 250 ms, assumed) and break the 300 ms budget."
+        },
+        {
+          "what": "Active-active multi-region writes",
+          "why": "Per-channel total order needs one writer. A home region per workspace gives that without a conflict strategy."
+        },
+        {
+          "what": "One Erlang mesh across regions",
+          "why": "Cross-ocean links make PubSub heartbeat and broadcast slow and fragile. One cluster per region avoids it."
+        },
+        {
+          "what": "PgBouncer",
+          "why": "About 100 connections per primary at 8 machines with a pool of 20. Not close to the limit."
+        },
+        {
+          "what": "Kafka for the job pipeline",
+          "why": "139 messages per second at peak. Oban in the same transaction still copes; the trigger is at 1M."
+        }
+      ]
+    },
+    {
+      "id": "x1000",
+      "label": "1000x",
+      "short": "1M DAU",
+      "title": "1M DAU: residency plane, outbox + NATS, dedicated cells",
+      "summary": "500k sockets and 28k live deliveries per second need a bigger fleet but no new idea. Three things break: Oban as a queue on the primary under push load, one 100k-member workspace that is 10% of DAU sharing a region's database, and EU residency. The workspace home region now doubles as the residency key, and the biggest workspaces move into dedicated cells.",
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Web and mobile apps",
+          "tech": "Browser + iOS/Android over WebSocket",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "proxy",
+          "label": "Fly Proxy + replay",
+          "tech": "Anycast, fly-replay to the home region",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R7"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "directory",
+          "label": "Workspace directory",
+          "tech": "Small Postgres: workspace to region, cell",
+          "icon": "key",
+          "zone": "edge",
+          "row": 1,
+          "serves": [
+            "R6",
+            "R8"
+          ],
+          "status": "new",
+          "role": "Authoritative map from workspace to home region, cell and residency policy. Tokens carry the claim, so the proxy needs the directory only on login and on a move.",
+          "specifics": [
+            "Holds no message content",
+            "Residency flag per workspace: eu_only",
+            "Read-only copy per region; writes through one primary",
+            "Workspace moves are an admin-run workflow that freezes, copies, flips the claim and unfreezes"
+          ],
+          "tradeoffs": [
+            "One more small system. It is on the login path, not the message path.",
+            "Whether user accounts (emails) count as EU personal data is an open question for the user"
+          ],
+          "failures": [
+            {
+              "mode": "Directory primary down",
+              "mitigation": "Existing tokens keep working; logins use the regional read copies; moves pause"
+            }
+          ],
+          "breaks": "Stale claims after many cell moves.",
+          "trigger": "Token claim mismatch rate above 0.1%.",
+          "cost": "~$60/mo est. (small Postgres per region, unverified)",
+          "alternatives": [
+            {
+              "what": "Home region only in the token",
+              "why": "Works until a workspace must move or a residency audit needs one authoritative record."
+            },
+            {
+              "what": "DNS per workspace",
+              "why": "Slow to change and hard to audit."
+            }
+          ]
+        },
+        {
+          "id": "chat",
+          "label": "Chat app (Phoenix)",
+          "tech": "Per region, 10-20 machines, ~25k sockets",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R6",
+            "R7",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "The same release scaled out. Join and reconnect admission control protects the database after a deploy or blip.",
+          "specifics": [
+            "Busiest region: 250k sockets, about 14k deliveries per second at peak",
+            "Admission control: at most 2k joins per second per node, with retry-after",
+            "Resync from replicas; read cursors flushed in batches every 2 s",
+            "Cluster of 20 nodes, full mesh"
+          ],
+          "tradeoffs": [
+            "Read cursors can be lost on a crash, so unread may be briefly stale. Acceptable: counts are eventual."
+          ],
+          "failures": [
+            {
+              "mode": "Region blip, 250k sockets reconnect",
+              "mitigation": "Admission control, jittered client backoff and replica-served resync; shed joins above the limit rather than overload the primary"
+            }
+          ],
+          "breaks": "A mesh above about 30 nodes and PubSub cost growing with nodes times messages.",
+          "trigger": "Region cluster above 30 nodes.",
+          "cost": "~$1.8k/mo est. (about 30 machines at an assumed ~$60, unverified)"
+        },
+        {
+          "id": "presence",
+          "label": "Presence service",
+          "tech": "ETS + 3 s batched diffs, watch lists",
+          "icon": "broadcast",
+          "zone": "app",
+          "row": 1,
+          "serves": [
+            "R2"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "cell",
+          "label": "Dedicated cell",
+          "tech": "Own Phoenix + Postgres for a huge workspace",
+          "icon": "layers",
+          "zone": "app",
+          "row": 2,
+          "serves": [
+            "R1",
+            "R6",
+            "R8"
+          ],
+          "status": "new",
+          "role": "A full copy of the stack for one very large workspace (for example 100k members, about 10% of DAU), so it cannot slow neighbours.",
+          "specifics": [
+            "Same release and schema as a region",
+            "Chosen by directory, reached by replay",
+            "Own primary, standbys, search index and bucket"
+          ],
+          "tradeoffs": [
+            "Extra fixed cost per cell, paid only for the few workspaces that need it"
+          ],
+          "failures": [
+            {
+              "mode": "Cell outage",
+              "mitigation": "Blast radius is one workspace; the region's other workspaces are unaffected"
+            }
+          ],
+          "breaks": "Every workspace wants its own cell, which is operations the team cannot carry.",
+          "trigger": "More than 10 cells, or a cell below 30% utilisation.",
+          "cost": "~$1.5k/mo est. per cell (about 15 machines incl. data, unverified)",
+          "alternatives": [
+            {
+              "what": "Stay on the shared regional primary",
+              "why": "A 100k-member workspace is about 46 messages per second average and 25k deliveries per all-hands; it would be the noisy neighbour for everyone."
+            },
+            {
+              "what": "Shard the shared primary by workspace (Citus)",
+              "why": "Cells give the same split with no cross-shard queries and reuse the same release."
+            },
+            {
+              "what": "A bigger primary",
+              "why": "Postpones the problem and still shares fate with small workspaces."
+            }
+          ]
+        },
+        {
+          "id": "db",
+          "label": "Postgres home primary",
+          "tech": "Per region, outbox table, EU plane closed",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R3",
+            "R4",
+            "R6",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "Adds an outbox table written in the send transaction. The EU region becomes a closed data plane: its primary, standbys, backups and replica never replicate outside the EU.",
+          "specifics": [
+            "outbox(id, workspace_id, kind, payload) partitioned by day, dropped after 3 days",
+            "Busiest region primary: about 700 inserts per second at peak",
+            "PITR backups kept in the same region"
+          ],
+          "tradeoffs": [
+            "EU workspaces cannot fail over to another region, so EU availability depends on EU capacity"
+          ],
+          "failures": [
+            {
+              "mode": "Outbox grows when the relay stops",
+              "mitigation": "Alert on oldest unpublished row above 30 s; partitions are dropped only after publish"
+            }
+          ],
+          "breaks": "Single primary write ceiling for the busiest region and storage near 4 TB per year.",
+          "trigger": "Primary CPU above 70%, or volume above 4 TB.",
+          "cost": "~$2k/mo est. (3 regions x 3 larger machines at an assumed ~$200, unverified)"
+        },
+        {
+          "id": "replica",
+          "label": "Postgres read replicas",
+          "tech": "2 per region for resync and history",
+          "icon": "database",
+          "zone": "data",
+          "row": 2,
+          "serves": [
+            "R1",
+            "R4",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "Two replicas per region take resync, scroll-back and export reads.",
+          "specifics": [
+            "Resync after reconnect is served here with the seq check",
+            "Replica lag above 5 s routes affected reads back to the primary"
+          ],
+          "tradeoffs": [
+            "Eventual reads; the seq check makes them safe"
+          ],
+          "failures": [
+            {
+              "mode": "Both replicas lag",
+              "mitigation": "Primary takes reads, and admission control caps resync rate"
+            }
+          ],
+          "breaks": "Per-region replicas hit disk size at multi-terabyte volume.",
+          "trigger": "Replica volume above 4 TB.",
+          "cost": "~$1k/mo est. (unverified)"
+        },
+        {
+          "id": "files",
+          "label": "Object storage",
+          "tech": "Per-region buckets, no cross-region copy",
+          "icon": "storage",
+          "zone": "data",
+          "row": 1,
+          "serves": [
+            "R5"
+          ],
+          "status": "changed",
+          "role": "Files stay in the workspace's home region bucket, so EU files never leave the EU.",
+          "specifics": [
+            "Bucket per region plus per-cell buckets",
+            "No replication rule across regions",
+            "Per-workspace retention deletes objects with the message"
+          ],
+          "tradeoffs": [
+            "No cross-region redundancy for EU files unless a second EU location is added"
+          ],
+          "failures": [
+            {
+              "mode": "Bucket outage in one region",
+              "mitigation": "Uploads queue client-side and retry; message text is unaffected"
+            }
+          ],
+          "breaks": "Egress cost and latency for far members.",
+          "trigger": "File egress above 30% of the bill.",
+          "cost": "~$1.5k/mo est. (73 TB per year; about $0.02/GB-month on the first year's average, unverified)"
+        },
+        {
+          "id": "search",
+          "label": "Search (OpenSearch)",
+          "tech": "Per-region cluster, EU index stays in EU",
+          "icon": "search",
+          "zone": "data",
+          "row": 3,
+          "serves": [
+            "R4",
+            "R8",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "Per-region cluster with hot and warm tiers by index age. EU workspaces index only into the EU cluster.",
+          "specifics": [
+            "Monthly indices; indices older than 90 days move to warm nodes with fewer replicas",
+            "Indexing fed from NATS consumers, 700 documents per second at peak in the busiest region"
+          ],
+          "tradeoffs": [
+            "Warm queries are slower, which is acceptable for old history"
+          ],
+          "failures": [
+            {
+              "mode": "Hot tier fills",
+              "mitigation": "Alert at 60%, then rebalance to warm early"
+            }
+          ],
+          "breaks": "Disk for 7.3 TB per year of messages, indexed.",
+          "trigger": "Hot tier above 60% disk.",
+          "cost": "~$8k/mo est. (about 40 data nodes at an assumed ~$200, unverified)"
+        },
+        {
+          "id": "jobs",
+          "label": "Outbox relay + Oban",
+          "tech": "Relay to NATS; Oban for scheduled jobs only",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "serves": [
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "changed",
+          "role": "Reads the outbox table and publishes each event to NATS. Oban keeps only low-volume work: retention sweeps, exports, reminders.",
+          "specifics": [
+            "Relay runs as a singleton per region with a lease",
+            "Publishes with the message id as the dedup key"
+          ],
+          "tradeoffs": [
+            "Two moving parts instead of one"
+          ],
+          "failures": [
+            {
+              "mode": "Relay duplicates events after a restart",
+              "mitigation": "Consumers are idempotent by message id; JetStream dedup window of 2 minutes"
+            }
+          ],
+          "breaks": "None expected before 10M.",
+          "trigger": "Relay lag above 5 s.",
+          "cost": "Inside worker machines"
+        },
+        {
+          "id": "bus",
+          "label": "Event bus (NATS JetStream)",
+          "tech": "3-node cluster per region, at-least-once",
+          "icon": "queue",
+          "zone": "services",
+          "row": 1,
+          "serves": [
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "new",
+          "role": "Durable stream for push and index events with replay and consumer groups, absorbing all-hands bursts.",
+          "specifics": [
+            "Streams: push, index, files; retention 3 days",
+            "Pull consumers with ack wait 30 s and max deliver 10",
+            "Per-region cluster, EU stream stays in EU"
+          ],
+          "tradeoffs": [
+            "Another system to run; chosen over Kafka for a team of 8"
+          ],
+          "failures": [
+            {
+              "mode": "Cluster loses quorum",
+              "mitigation": "The outbox keeps growing safely in Postgres; the relay resumes when quorum is back"
+            }
+          ],
+          "breaks": "Stream volume and consumer lag at 10M.",
+          "trigger": "Consumer lag above 30 s.",
+          "cost": "~$400/mo est. (3 regions x 3 small machines, unverified)",
+          "alternatives": [
+            {
+              "what": "Kafka",
+              "why": "Heavier to run for 4k events per second; replay and ordering are not needed beyond what the outbox keeps."
+            },
+            {
+              "what": "SQS",
+              "why": "A second cloud, with its own residency and credentials handling."
+            },
+            {
+              "what": "Keep Oban on a separate Postgres",
+              "why": "Pushes the job load aside but keeps three row writes per job and no replay."
+            }
+          ]
+        },
+        {
+          "id": "fanout",
+          "label": "Fan-out workers",
+          "tech": "Push + index consumers, idempotent by msg id",
+          "icon": "worker",
+          "zone": "services",
+          "row": 2,
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "status": "new",
+          "role": "Consume push and index events. Push resolves recipients and devices, applies mute and mention rules, and sends in rate-limited batches.",
+          "specifics": [
+            "Around 3 pushes per message on average (assumed), so about 4k per second at peak",
+            "Index consumer bulk-writes 500 documents at a time",
+            "EU workspaces send content-free pushes (open the app to fetch) so message text never reaches a provider (decision)"
+          ],
+          "tradeoffs": [
+            "Content-free push is a worse notification, in exchange for residency"
+          ],
+          "failures": [
+            {
+              "mode": "Consumer crashes mid-batch",
+              "mitigation": "Un-acked events are redelivered; idempotent by message id"
+            }
+          ],
+          "breaks": "Provider rate limits at 10M.",
+          "trigger": "Provider 429s above 1%.",
+          "cost": "~$600/mo est. (about 10 machines, unverified)",
+          "alternatives": [
+            {
+              "what": "Send push inside the chat nodes",
+              "why": "Burst of 25k pushes would take CPU from sockets."
+            },
+            {
+              "what": "A third-party push service",
+              "why": "Per-message pricing at 4k per second and a residency gap."
+            }
+          ]
+        },
+        {
+          "id": "push",
+          "label": "APNs and FCM",
+          "tech": "Apple and Google push gateways",
+          "icon": "mail",
+          "zone": "services",
+          "row": 3,
+          "serves": [
+            "R3"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "proxy",
+          "label": "WSS, HTTPS"
+        },
+        {
+          "from": "proxy",
+          "to": "directory",
+          "label": "lookup"
+        },
+        {
+          "from": "proxy",
+          "to": "chat",
+          "label": "to home"
+        },
+        {
+          "from": "proxy",
+          "to": "cell",
+          "label": "to cell"
+        },
+        {
+          "from": "chat",
+          "to": "presence",
+          "label": "heartbeats"
+        },
+        {
+          "from": "chat",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "chat",
+          "to": "replica",
+          "label": "history"
+        },
+        {
+          "from": "chat",
+          "to": "search",
+          "label": "query"
+        },
+        {
+          "from": "chat",
+          "to": "files",
+          "label": "presign"
+        },
+        {
+          "from": "db",
+          "to": "replica",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "db",
+          "label": "outbox",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "bus",
+          "label": "publish",
+          "async": true
+        },
+        {
+          "from": "bus",
+          "to": "fanout",
+          "label": "consume",
+          "async": true
+        },
+        {
+          "from": "fanout",
+          "to": "push",
+          "label": "notify",
+          "async": true
+        },
+        {
+          "from": "fanout",
+          "to": "search",
+          "label": "bulk index",
+          "async": true
+        }
+      ],
+      "moves": [
+        {
+          "what": "Make the EU a closed data plane keyed by the workspace's residency flag",
+          "why": "The home region from 100k already places workspace data. Residency means every store behind it stays put: DB, standbys, backups, search, bucket, event stream and push content.",
+          "driver": "Data rules (EU residency) and Geography",
+          "trigger": "First enterprise contract requiring EU residency, or EU DAU above 20%"
+        },
+        {
+          "what": "Move any workspace above 5% of its region's load into a dedicated cell",
+          "why": "A 100k-member workspace is about 10% of 1M DAU. Its all-hands and its locks would be everyone's noisy neighbour.",
+          "driver": "Tenant skew and Tenancy (workspaces up to 100k members)",
+          "trigger": "A workspace above 5% of its region's messages per second, or its channel locks in primary wait events"
+        },
+        {
+          "what": "Replace Oban-as-queue with an outbox table and NATS JetStream",
+          "why": "About 4k push jobs per second at peak, each three row writes on the primary, plus 25k on an all-hands, would take a visible share of write IOPS.",
+          "driver": "Background work and Traffic shape (all-hands spikes)",
+          "trigger": "Oban writes above 25% of primary write IOPS, or queue lag above 5 s"
+        },
+        {
+          "what": "Batch read-cursor writes in memory and flush every 2 s",
+          "why": "About 100 cursor updates per member per day (assumed) is 3.5k per second at peak, 1.7k in the busiest region. Counts may be eventual.",
+          "driver": "Consistency per path (counts eventual) and Read to write ratio",
+          "trigger": "Cursor updates above 30% of primary writes"
+        },
+        {
+          "what": "Admission control on joins and replica-served resync",
+          "why": "After a deploy or a region blip, 250k sockets in the busiest region reconnect and each resyncs.",
+          "driver": "Traffic shape (3x Monday) and Connection model",
+          "trigger": "Resync queries above 5k per second, or primary connection waits"
+        },
+        {
+          "what": "Scale the chat fleet to 10 to 20 machines per region",
+          "why": "About 25k sockets per machine keeps the BEAM schedulers under 60% at peak (assumed).",
+          "driver": "Concurrent sockets at peak (500k)",
+          "trigger": "Sockets per machine above 25k, or scheduler utilisation above 60%"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Fly.io (platform fit)",
+          "why": "Kept for gateways and Postgres at this size. Open to verify: proxy connection limits for 250k sockets per region and egress of about 15 TB per month (about $300 to 600 est. at an assumed $0.02 to 0.04/GB, unverified). If a limit bites, it goes to Fly support first, not a migration."
+        },
+        {
+          "what": "Kafka for the event bus",
+          "why": "NATS JetStream does at-least-once and replay with less to operate for a team of 8. Revisit if consumers beyond push and index appear."
+        },
+        {
+          "what": "SQS for push",
+          "why": "A second cloud, a residency path to prove, and credentials to rotate."
+        },
+        {
+          "what": "Citus or Vitess sharding of the regional primary",
+          "why": "Cells split by workspace with no cross-shard queries. Sharding adds routing and rebalancing for the same split."
+        },
+        {
+          "what": "CDN in front of file buckets",
+          "why": "Files are read mostly in-region; edge caching would complicate EU residency. Revisit when file egress dominates cost."
+        },
+        {
+          "what": "Active-active writes for one workspace",
+          "why": "Per-channel total order needs one writer; the home region provides it."
+        }
+      ]
+    },
+    {
+      "id": "x10000",
+      "label": "10000x",
+      "short": "10M DAU",
+      "title": "10M DAU: stamp cells, archive cold history",
+      "summary": "5M sockets and 278k live deliveries per second cannot live in a three-region mesh. The 1M design becomes the unit: each cell serves up to about 1M DAU with its own Erlang cluster, Postgres, search and bus, and the directory maps workspaces to cells. Cold history moves to object storage, and deploys go cell by cell.",
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Web and mobile apps",
+          "tech": "Browser + iOS/Android over WebSocket",
+          "icon": "browser",
+          "zone": "client",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "proxy",
+          "label": "Fly Proxy + replay",
+          "tech": "Anycast, fly-replay by token cell claim",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R7"
+          ],
+          "status": "changed",
+          "role": "Replays to the workspace's cell, read from the token claim. No directory lookup per connect.",
+          "specifics": [
+            "Claim: region, cell id, residency flag",
+            "Per-cell admission rate (assumed 5k joins per second) to bound reconnect storms"
+          ],
+          "tradeoffs": [
+            "Moving a workspace between cells needs a token refresh"
+          ],
+          "failures": [
+            {
+              "mode": "Stale cell claim after a move",
+              "mitigation": "Old cell answers with a redirect; the client refreshes the token"
+            }
+          ],
+          "breaks": "Proxy limits per app at millions of sockets.",
+          "trigger": "Connection counts approaching the per-app limits (to verify with Fly).",
+          "cost": "Egress ~$3k to 6k/mo est. (about 145 TB per month at an assumed $0.02 to 0.04/GB, unverified)"
+        },
+        {
+          "id": "directory",
+          "label": "Workspace directory",
+          "tech": "Replicated read-only per region; cell map",
+          "icon": "key",
+          "zone": "edge",
+          "row": 1,
+          "serves": [
+            "R6",
+            "R8"
+          ],
+          "status": "changed",
+          "role": "Also places new workspaces into cells with free capacity and runs moves between cells.",
+          "specifics": [
+            "Placement by cell headroom: sockets and messages per second",
+            "A cell is full at 1M DAU or 70% CPU",
+            "Largest workspaces get their own cell at signup"
+          ],
+          "tradeoffs": [
+            "Placement is sticky; rebalancing is a manual workflow"
+          ],
+          "failures": [
+            {
+              "mode": "Directory unavailable",
+              "mitigation": "Tokens and regional copies keep existing sessions running; new workspace placement queues"
+            }
+          ],
+          "breaks": "Moves and rebalancing at hundreds of cells.",
+          "trigger": "More than 50 cells.",
+          "cost": "~$200/mo est."
+        },
+        {
+          "id": "chat",
+          "label": "Chat cell (Phoenix)",
+          "tech": "About 12 cells, 20 machines each, own mesh",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R6",
+            "R7",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "A cell is the 1M-DAU design stamped out: its own Erlang cluster of at most about 20 nodes, so PubSub cost stays bounded.",
+          "specifics": [
+            "Busiest region: 2.5M sockets across about 5 cells",
+            "Per cell: up to 500k sockets, 1.4k messages per second at peak",
+            "One Fly app per cell so DNSCluster discovery stays inside it (to verify)",
+            "PubSub fan-out per cell: 1.4k msgs/s x 20 nodes = 28k inter-node sends per second, not 700k"
+          ],
+          "tradeoffs": [
+            "Many clusters to deploy and watch; a user in several workspaces holds a socket per cell"
+          ],
+          "failures": [
+            {
+              "mode": "Bad deploy",
+              "mitigation": "Canary one cell, watch its SLOs, then roll the rest; blast radius is at most one cell"
+            }
+          ],
+          "breaks": "Operating cost grows with cell count; tooling must keep it flat.",
+          "trigger": "On-call pages per cell rising as cells are added.",
+          "cost": "~$12k/mo est. (about 200 machines at an assumed ~$60, unverified)"
+        },
+        {
+          "id": "presence",
+          "label": "Presence service",
+          "tech": "ETS + 3 s batched diffs, watch lists",
+          "icon": "broadcast",
+          "zone": "app",
+          "row": 1,
+          "serves": [
+            "R2"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "cell",
+          "label": "Dedicated cell",
+          "tech": "Own Phoenix + Postgres for a huge workspace",
+          "icon": "layers",
+          "zone": "app",
+          "row": 2,
+          "serves": [
+            "R1",
+            "R6",
+            "R8"
+          ],
+          "status": "same",
+          "role": "Unchanged. Now the same stamp as any chat cell, with only one workspace in it.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "db",
+          "label": "Postgres per cell",
+          "tech": "Primary + 2 sync standbys, 12 clusters",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "serves": [
+            "R1",
+            "R3",
+            "R4",
+            "R6",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "Each cell has its own primary. Only recent months stay hot; older partitions are archived.",
+          "specifics": [
+            "About 1.4k messages per second per cell, about 6 TB per year per cell before archive",
+            "Hot window: 12 months of partitions",
+            "Fleet managed by one runbook and one migration pipeline"
+          ],
+          "tradeoffs": [
+            "Twelve Postgres clusters to operate with a team of 8"
+          ],
+          "failures": [
+            {
+              "mode": "A cell's primary fails",
+              "mitigation": "Promote the synced standby inside the cell; other cells are unaffected"
+            }
+          ],
+          "breaks": "Fleet operations: upgrades, backups and incidents across 12 and growing.",
+          "trigger": "A cell above 5 TB hot, or more than 4 hours of backup or restore.",
+          "cost": "~$25k/mo est. (12 cells x 3 machines at an assumed ~$600 incl. volumes, unverified)"
+        },
+        {
+          "id": "replica",
+          "label": "Postgres read replicas",
+          "tech": "2 per region for resync and history",
+          "icon": "database",
+          "zone": "data",
+          "row": 2,
+          "serves": [
+            "R1",
+            "R4",
+            "R9"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "files",
+          "label": "Object storage + archive",
+          "tech": "Per-cell buckets, cold partition segments",
+          "icon": "storage",
+          "zone": "data",
+          "row": 1,
+          "serves": [
+            "R5",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "Besides files, holds cold messages: partitions older than 12 months are written as compressed segments per channel and month, then detached from Postgres.",
+          "specifics": [
+            "Archive job: write segment, verify checksum, detach partition",
+            "Scroll-back into archived history reads the segment; p95 target 1.5 s (inferred, product decision)",
+            "Retention deletes remove segments and index entries together"
+          ],
+          "tradeoffs": [
+            "Old history is slower to scroll through. Search still finds it through OpenSearch warm tier."
+          ],
+          "failures": [
+            {
+              "mode": "Segment missing or corrupt",
+              "mitigation": "Partition is detached only after verification; keep the partition for 30 days after archive as a safety net"
+            }
+          ],
+          "breaks": "Storage cost at 730 TB of files per year.",
+          "trigger": "Storage above 40% of infrastructure cost.",
+          "cost": "~$15k/mo est. at the end of year 1 (730 TB files at an assumed $0.02/GB-month, unverified)"
+        },
+        {
+          "id": "search",
+          "label": "Search (OpenSearch)",
+          "tech": "Per cell, hot/warm tiers by index age",
+          "icon": "search",
+          "zone": "data",
+          "row": 3,
+          "serves": [
+            "R4",
+            "R8",
+            "R9"
+          ],
+          "status": "changed",
+          "role": "One cluster per cell with hot, warm and (later) searchable-snapshot tiers so full history stays queryable at lower cost.",
+          "specifics": [
+            "Hot: last 90 days. Warm: 90 days to 2 years. Cold: snapshot-backed",
+            "7k documents per second across the busiest region at peak"
+          ],
+          "tradeoffs": [
+            "Cold search is slow; a banner says so"
+          ],
+          "failures": [
+            {
+              "mode": "Cluster red in one cell",
+              "mitigation": "Search degrades for that cell only. Reindex from segments and Postgres"
+            }
+          ],
+          "breaks": "Disk and node count for forever retention.",
+          "trigger": "Hot tier above 60% disk.",
+          "cost": "~$40k/mo est. (about 200 nodes at an assumed ~$200, unverified)"
+        },
+        {
+          "id": "jobs",
+          "label": "Outbox relay + Oban",
+          "tech": "Relay to NATS; Oban for scheduled jobs only",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "serves": [
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "bus",
+          "label": "Event bus (NATS JetStream)",
+          "tech": "3-node cluster per cell, at-least-once",
+          "icon": "queue",
+          "zone": "services",
+          "row": 1,
+          "serves": [
+            "R3",
+            "R4",
+            "R5"
+          ],
+          "status": "changed",
+          "role": "One cluster per cell, so a stuck consumer in one cell never delays another.",
+          "specifics": [
+            "Streams per cell; consumer lag alert at 30 s",
+            "About 42k push events per second across all cells at peak (assumed 3 per message)"
+          ],
+          "tradeoffs": [
+            "More clusters, each small"
+          ],
+          "failures": [
+            {
+              "mode": "Cell bus loses quorum",
+              "mitigation": "Outbox keeps growing in that cell's Postgres; the relay resumes after"
+            }
+          ],
+          "breaks": "Cluster count.",
+          "trigger": "Operations time per cell above budget.",
+          "cost": "~$3k/mo est. (12 cells x 3 small machines, unverified)"
+        },
+        {
+          "id": "fanout",
+          "label": "Fan-out workers",
+          "tech": "Push + index consumers, idempotent by msg id",
+          "icon": "worker",
+          "zone": "services",
+          "row": 2,
+          "serves": [
+            "R3",
+            "R4"
+          ],
+          "status": "changed",
+          "role": "Per cell. Push is collapsed per channel and rate-limited per device and provider.",
+          "specifics": [
+            "Collapse same-channel pushes within 10 s into one",
+            "Per-device limit of 1 push per 5 s per channel",
+            "Provider connection pools shared per cell"
+          ],
+          "tradeoffs": [
+            "Collapsing delays a push by up to 10 s in busy channels; mentions bypass it"
+          ],
+          "failures": [
+            {
+              "mode": "Provider throttling",
+              "mitigation": "Back off per provider, keep events in the stream, and continue other cells"
+            }
+          ],
+          "breaks": "Provider quotas across cells.",
+          "trigger": "429s above 1%.",
+          "cost": "~$6k/mo est. (about 100 machines, unverified)"
+        },
+        {
+          "id": "push",
+          "label": "APNs and FCM",
+          "tech": "Apple and Google push gateways",
+          "icon": "mail",
+          "zone": "services",
+          "row": 3,
+          "serves": [
+            "R3"
+          ],
+          "status": "same",
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "proxy",
+          "label": "WSS, HTTPS"
+        },
+        {
+          "from": "proxy",
+          "to": "directory",
+          "label": "lookup"
+        },
+        {
+          "from": "proxy",
+          "to": "chat",
+          "label": "to cell"
+        },
+        {
+          "from": "proxy",
+          "to": "cell",
+          "label": "to cell"
+        },
+        {
+          "from": "chat",
+          "to": "presence",
+          "label": "heartbeats"
+        },
+        {
+          "from": "chat",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "chat",
+          "to": "replica",
+          "label": "history"
+        },
+        {
+          "from": "chat",
+          "to": "search",
+          "label": "query"
+        },
+        {
+          "from": "chat",
+          "to": "files",
+          "label": "presign"
+        },
+        {
+          "from": "db",
+          "to": "replica",
+          "async": true
+        },
+        {
+          "from": "db",
+          "to": "files",
+          "label": "archive",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "db",
+          "label": "outbox",
+          "async": true
+        },
+        {
+          "from": "jobs",
+          "to": "bus",
+          "label": "publish",
+          "async": true
+        },
+        {
+          "from": "bus",
+          "to": "fanout",
+          "label": "consume",
+          "async": true
+        },
+        {
+          "from": "fanout",
+          "to": "push",
+          "label": "notify",
+          "async": true
+        },
+        {
+          "from": "fanout",
+          "to": "search",
+          "label": "bulk index",
+          "async": true
+        }
+      ],
+      "moves": [
+        {
+          "what": "Stamp cells of at most about 1M DAU and place workspaces in them through the directory",
+          "why": "PubSub broadcast cost is messages per second times nodes. In the busiest region that is about 7k messages per second x 100 nodes = 700k inter-node sends per second in one mesh. Cells of 20 nodes cut it to about 28k per cell.",
+          "driver": "Concurrent sockets (5M) and Messages per second (13.9k at peak)",
+          "trigger": "A region cluster above 30 nodes, or distribution traffic above 20% of CPU"
+        },
+        {
+          "what": "Archive partitions older than 12 months to object storage",
+          "why": "About 6 TB per year per cell, kept forever, makes primaries too large to back up, restore or vacuum comfortably.",
+          "driver": "Data growth (73 TB per year) and Data rules (kept forever)",
+          "trigger": "A cell above 5 TB hot, or backup or restore above 4 hours"
+        },
+        {
+          "what": "Tier OpenSearch into hot, warm and cold",
+          "why": "146B messages per year of searchable history. Hot only is too expensive at this size.",
+          "driver": "Data rules (search covers all history) and Team and cost",
+          "trigger": "Hot tier above 60% disk, or search p95 above 1 s"
+        },
+        {
+          "what": "Collapse push per channel and rate-limit per device",
+          "why": "About 42k push events per second across cells at peak (assumed) risks provider throttling and a noisy phone.",
+          "driver": "Background work and Traffic shape",
+          "trigger": "429s from APNs or FCM above 1%"
+        },
+        {
+          "what": "Deploy and observe by cell: one canary cell, SLOs per cell",
+          "why": "A bad deploy should touch at most about 1M members.",
+          "driver": "Team and cost (8 people) and the 99.95% availability target",
+          "trigger": "Every deploy; canary error budget burn"
+        },
+        {
+          "what": "Decision: where cell Postgres runs once a cell passes 5 TB hot",
+          "why": "Stay on Fly.io for sockets and the mesh. Whether to keep 12 or more Postgres clusters on Fly's volumes and tooling depends on limits and on-call load that must be verified.",
+          "driver": "Team and cost; Data growth",
+          "trigger": "Fly volume or host limits reached (to verify), or database on-call load above one engineer-week per month"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Fly.io for gateways and compute (platform fit)",
+          "why": "Anycast, replay and one app per cell fit cells well. Open to verify: machines per org, proxy connections at 5M sockets and egress of about 145 TB per month (about $3k to 6k est.). Staying is a claim to check with Fly, not an assumption."
+        },
+        {
+          "what": "Move everything to a hyperscaler's Kubernetes now",
+          "why": "Loses anycast and replay, needs a new network and deploy stack, and costs months for 8 people. Cells make a later move one cell at a time."
+        },
+        {
+          "what": "Split gateway and core inside each cell",
+          "why": "At about 20 nodes the full mesh is fine. A split earns its place only if a cell must exceed about 30 nodes."
+        },
+        {
+          "what": "Shard a cell's messages by channel",
+          "why": "Workspace is the unit; sharding by channel adds cross-shard history and search queries and does not bound blast radius."
+        },
+        {
+          "what": "One global Kafka",
+          "why": "No event crosses workspaces. A bus per cell isolates failures."
+        },
+        {
+          "what": "Keep all history hot in Postgres",
+          "why": "About 20 TB per cell after 3 years, with hours of backup and vacuum time."
+        }
+      ]
+    }
+  ]
+};
+</script>
+<script>
+(function () {
+  const ICONS = {
+    browser: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r=".6"/><circle cx="9" cy="6.5" r=".6"/>',
+    mobile: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
+    shield: '<path d="M12 3l7.5 3v6c0 4.6-3.1 7.7-7.5 9.2C7.6 19.7 4.5 16.6 4.5 12V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+    balancer: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v9.6M12 11l-6.2 6M12 11l6.2 6"/>',
+    lambda: '<path d="M6 4h3.5L18 20"/><path d="M12.3 10.5L7 20"/>',
+    server: '<rect x="4" y="3.5" width="16" height="7" rx="1.8"/><rect x="4" y="13.5" width="16" height="7" rx="1.8"/><path d="M8 7h.01M8 17h.01M12 7h4M12 17h4"/>',
+    worker: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+    database: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13"/><path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 5 9-5" opacity=".55"/>',
+    funnel: '<path d="M3.5 4.5h17l-6.5 8v6l-4 2v-8z"/>',
+    zap: '<path d="M13.5 2.5L4.5 14h7l-1 7.5 9-11.5h-7z"/>',
+    queue: '<rect x="3" y="4.5" width="18" height="4" rx="1.2"/><rect x="3" y="10.5" width="18" height="4" rx="1.2"/><rect x="3" y="16.5" width="11" height="4" rx="1.2"/>',
+    broadcast: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+    gateway: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+    key: '<circle cx="8" cy="15.5" r="4.2"/><path d="M11 12.5l9-9M16.5 7l3 3"/>',
+    storage: '<path d="M3 7.5l9-4.5 9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2.2"/><path d="M3.5 6.5l8.5 6 8.5-6"/>',
+    cloud: '<path d="M7 18.5h10.5a4 4 0 0 0 .6-8A6.2 6.2 0 0 0 6.2 9.6 4.5 4.5 0 0 0 7 18.5z"/>',
+    chart: '<path d="M4 20V11M10 20V5M16 20v-7M21.5 20h-19"/>',
+    breaker: '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="16" cy="12" r="2.3"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'
+  };
+  const svgIcon = (k, cls) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (cls ? ' class="' + cls + '"' : '') + '>' + (ICONS[k] || ICONS.cloud) + '</svg>';
+  const CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  const NW = 216, NH = 112, CW = 300, RH = 136, TOP = 58, PADX = 20, PADB = 24, CH = 20, GAP = CW - NW;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const zoneIdx = Object.fromEntries(DESIGN.zones.map((z, i) => [z.id, i]));
+  const reqText = Object.fromEntries(DESIGN.requirements.map((r) => [r.id, r.text]));
+  let tier = DESIGN.tiers[0], opener = null;
+
+  $("title").textContent = DESIGN.title;
+  $("stack").textContent = DESIGN.stack;
+  $("problem").textContent = DESIGN.problem;
+  $("reqs").innerHTML = DESIGN.requirements.map((r) => '<span class="req"><b>' + esc(r.id) + '</b>' + esc(r.text) + '</span>').join("");
+
+  const SRC = (s) => (String(s).toLowerCase().match(/^(repo|brief|user|inferred|unknown)/) || [, "unknown"])[1];
+  $("profile").innerHTML = (DESIGN.profile || []).map((p) => '<div class="prof"><span class="eyebrow">' + esc(p.label) + '</span><span class="v">' + esc(p.value) + '</span><span class="d">' + esc(p.drives) + '</span><span class="src ' + SRC(p.source) + '">' + esc(p.source) + '</span></div>').join("");
+
+  DESIGN.tiers.forEach((t) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.setAttribute("role", "tab"); b.id = "tab-" + t.id;
+    b.innerHTML = '<span class="t">' + esc(t.label) + '</span><span class="l">' + esc(t.short) + '</span>';
+    b.addEventListener("click", () => { location.hash = t.id; });
+    $("tabs").appendChild(b);
+  });
+
+  $("legend").innerHTML =
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="1.6" stroke-dasharray="7 5"/></svg>Request path</span>' +
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="2.2" stroke-dasharray="2 6" stroke-linecap="round"/></svg>Async or push</span>' +
+    '<span><b style="color:var(--new)">NEW</b> added at this tier</span><span><b style="color:var(--changed)">CHANGED</b> reconfigured</span><span><b style="color:var(--removed)">REMOVED</b> no longer needed</span>';
+
+  $("only").addEventListener("change", (e) => $("canvas").classList.toggle("only-changes", e.target.checked));
+
+  const pos = (n) => ({ x: PADX + zoneIdx[n.zone] * CW + (CW - NW) / 2, y: TOP + n.row * RH });
+
+  function bez(x1, y1, c1x, c1y, c2x, c2y, x2, y2) {
+    const t = 0.5, m = 0.5, mx = m * m * m * x1 + 3 * m * m * t * c1x + 3 * m * t * t * c2x + t * t * t * x2;
+    const my = m * m * m * y1 + 3 * m * m * t * c1y + 3 * m * t * t * c2y + t * t * t * y2;
+    return { d: "M" + x1 + "," + y1 + " C" + c1x + "," + c1y + " " + c2x + "," + c2y + " " + x2 + "," + y2, mx, my };
+  }
+  function rounded(pts, r) {
+    let d = "M" + pts[0][0] + "," + pts[0][1];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+      const r1 = Math.min(r, Math.hypot(x - px, y - py) / 2, Math.hypot(nx - x, ny - y) / 2);
+      const ax = x - Math.sign(x - px) * r1, ay = y - Math.sign(y - py) * r1;
+      const bx = x + Math.sign(nx - x) * r1, by = y + Math.sign(ny - y) * r1;
+      d += " L" + ax + "," + ay + " Q" + x + "," + y + " " + bx + "," + by;
+    }
+    const last = pts[pts.length - 1];
+    return d + " L" + last[0] + "," + last[1];
+  }
+  /* Adjacent columns get a curve, same column a vertical curve, longer spans run along a channel under the nodes. */
+  function wirePath(a, b, k, channelTop) {
+    const pa = pos(a), pb = pos(b), ca = zoneIdx[a.zone], cb = zoneIdx[b.zone];
+    if (ca === cb && Math.abs(a.row - b.row) > 1) {
+      const xr = pa.x + NW, gx = xr + 18, ya = pa.y + NH / 2, yb = pb.y + NH / 2;
+      return { d: rounded([[xr, ya], [gx, ya], [gx, yb], [xr, yb]], 10), mx: gx, my: (ya + yb) / 2, side: true, inset: true };
+    }
+    if (ca === cb) {
+      const down = pb.y > pa.y, x = pa.x + NW / 2, y1 = down ? pa.y + NH : pa.y, y2 = down ? pb.y : pb.y + NH;
+      return Object.assign(bez(x, y1, x, y1 + (down ? 20 : -20), x, y2 + (down ? -20 : 20), x, y2), { side: true });
+    }
+    const right = cb > ca, y1 = pa.y + NH / 2, y2 = pb.y + NH / 2;
+    const x1 = right ? pa.x + NW : pa.x, x2 = right ? pb.x : pb.x + NW;
+    if (Math.abs(cb - ca) === 1) {
+      const d = GAP / 2;
+      return bez(x1, y1, x1 + (right ? d : -d), y1, x2 + (right ? -d : d), y2, x2, y2);
+    }
+    const off = (k % 4) * 6 - 9;
+    const g1 = x1 + (right ? GAP / 2 : -GAP / 2) + off, g2 = x2 + (right ? -GAP / 2 : GAP / 2) - off;
+    const cy = channelTop + k * CH;
+    return { d: rounded([[x1, y1], [g1, y1], [g1, cy], [g2, cy], [g2, y2], [x2, y2]], 10), mx: (g1 + g2) / 2, my: cy };
+  }
+
+  function draw() {
+    const c = $("canvas");
+    const maxRow = Math.max(...tier.nodes.map((n) => n.row));
+    const byId0 = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    const long = tier.edges.filter((e) => byId0[e.from] && byId0[e.to] && Math.abs(zoneIdx[byId0[e.from].zone] - zoneIdx[byId0[e.to].zone]) > 1);
+    const channelTop = TOP + maxRow * RH + NH + 28;
+    const W = PADX * 2 + DESIGN.zones.length * CW, H = channelTop + Math.max(0, long.length - 1) * CH + (long.length ? 24 : 0) + PADB - (long.length ? 0 : 28);
+    c.style.width = W + "px"; c.style.height = H + "px";
+    fit(W, H);
+    let html = "";
+    DESIGN.zones.forEach((z, i) => {
+      html += '<div class="lane" style="left:' + (PADX + i * CW + 6) + 'px;width:' + (CW - 12) + 'px"></div>';
+      html += '<div class="lane-head" style="left:' + (PADX + i * CW + 18) + 'px"><i style="background:var(--z-' + z.id + '-ink)"></i>' + esc(z.label) + '</div>';
+    });
+    const byId = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    let wires = "", labels = "";
+    tier.edges.forEach((e) => {
+      const a = byId[e.from], b = byId[e.to];
+      if (!a || !b) return;
+      const w = wirePath(a, b, long.indexOf(e), channelTop);
+      const cls = 'wire ' + (e.async ? "async" : "sync");
+      wires += '<path class="' + cls + '" data-a="' + e.from + '" data-b="' + e.to + '" d="' + w.d + '" marker-end="url(#ah)"/>';
+      if (e.label) {
+        const txt = e.label.length > 10 ? e.label.slice(0, 9) + "…" : e.label;
+        const tw = txt.length * 6.4 + 14, lx = w.inset ? w.mx + 4 + tw / 2 : w.side ? w.mx + 8 + tw / 2 : w.mx;
+        labels += '<g class="wire-label" data-a="' + e.from + '" data-b="' + e.to + '"><rect x="' + (lx - tw / 2) + '" y="' + (w.my - 10) + '" width="' + tw + '" height="20" rx="10"/><text x="' + lx + '" y="' + (w.my + 3.8) + '" text-anchor="middle">' + esc(txt) + '</text><title>' + esc(e.label) + '</title></g>';
+      }
+    });
+    html += '<svg class="wires" width="' + W + '" height="' + H + '"><defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--wire)"/></marker></defs>' + wires + labels + '</svg>';
+    tier.nodes.forEach((n) => {
+      const p = pos(n);
+      const st = n.status === "same" ? "" : '<span class="st">' + n.status.toUpperCase() + '</span>';
+      html += '<button class="node ' + n.status + '" data-id="' + n.id + '" style="left:' + p.x + 'px;top:' + p.y + 'px;width:' + NW + 'px;height:' + NH + 'px" aria-label="' + esc(n.label + ", " + n.status + ". Open details") + '">' +
+        '<span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+        '<span style="min-width:0;overflow:hidden"><span class="nm">' + esc(n.label) + '</span><span class="tc">' + esc(n.tech) + '</span></span>' + st + '</button>';
+    });
+    c.innerHTML = html;
+    c.querySelectorAll(".node").forEach((el) => {
+      el.addEventListener("click", () => openNode(el.dataset.id, el));
+      el.addEventListener("mouseenter", () => hot(el.dataset.id));
+      el.addEventListener("mouseleave", () => hot(null));
+      el.addEventListener("focus", () => hot(el.dataset.id));
+      el.addEventListener("blur", () => hot(null));
+    });
+  }
+
+  let dims = null;
+  function fit(W, H) {
+    if (W) dims = [W, H];
+    if (!dims) return;
+    const avail = $("cwrap").clientWidth;
+    const scale = Math.max(0.62, Math.min(1, avail / dims[0]));
+    $("canvas").style.transform = "scale(" + scale + ")";
+    $("cfit").style.width = dims[0] * scale + "px";
+    $("cfit").style.height = dims[1] * scale + "px";
+  }
+  window.addEventListener("resize", () => fit());
+
+  function hot(id) {
+    const c = $("canvas");
+    c.classList.toggle("hovering", !!id);
+    c.querySelectorAll(".hot").forEach((e) => e.classList.remove("hot"));
+    if (!id) return;
+    const linked = new Set([id]);
+    c.querySelectorAll("[data-a]").forEach((e) => {
+      if (e.dataset.a === id || e.dataset.b === id) { e.classList.add("hot"); linked.add(e.dataset.a); linked.add(e.dataset.b); }
+    });
+    c.querySelectorAll(".node").forEach((e) => { if (linked.has(e.dataset.id)) e.classList.add("hot"); });
+  }
+
+  function list(items) { return items && items.length ? '<ul>' + items.map((i) => '<li>' + esc(i) + '</li>').join("") + '</ul>' : ""; }
+
+  function openNode(id, from) {
+    const n = tier.nodes.find((x) => x.id === id);
+    if (!n) return;
+    if (from) opener = from;
+    const m = $("modal");
+    const statusText = { new: "New at " + tier.label, changed: "Changed at " + tier.label, same: "Unchanged at " + tier.label, removed: "Removed at " + tier.label }[n.status];
+    const conns = tier.edges.filter((e) => e.from === id || e.to === id).map((e) => {
+      const other = e.from === id ? e.to : e.from;
+      const o = tier.nodes.find((x) => x.id === other);
+      return o ? '<button class="conn" data-go="' + o.id + '">' + (e.from === id ? "→ " : "← ") + esc(o.label) + (e.label ? " · " + esc(e.label) : "") + '</button>' : "";
+    }).join("");
+    let body = '<div class="pills"><span class="pill ' + n.status + '">' + esc(statusText) + '</span>' + (n.cost ? '<span class="pill same">' + esc(n.cost) + '</span>' : "") + '</div>';
+    if (n.serves && n.serves.length) body += '<div class="sec"><h4>Why this problem needs it</h4><div class="serves">' + n.serves.map((r) => '<div><b>' + esc(r) + '</b>' + esc(reqText[r] || "") + '</div>').join("") + '</div></div>';
+    if (n.role) body += '<div class="sec"><h4>Role</h4><p>' + esc(n.role) + '</p></div>';
+    if (n.specifics && n.specifics.length) body += '<div class="sec"><h4>Specifics</h4>' + list(n.specifics) + '</div>';
+    if (n.tradeoffs && n.tradeoffs.length) body += '<div class="sec"><h4>Trade-offs</h4>' + list(n.tradeoffs) + '</div>';
+    const altSrc = n.alternatives != null ? n.alternatives : (DESIGN.tiers.slice(0, DESIGN.tiers.indexOf(tier)).reverse().map((t) => (t.nodes.find((x) => x.id === n.id) || {}).alternatives).find((a) => a != null));
+    body += '<div class="sec"><h4>Alternatives considered</h4>' + (Array.isArray(altSrc) && altSrc.length
+      ? '<div class="alts">' + altSrc.map((a) => '<div><strong>' + esc(a.what) + '</strong><span>' + esc(a.why) + '</span></div>').join("") + '</div>'
+      : '<p class="muted">' + esc(typeof altSrc === "string" && altSrc ? altSrc : "No alternatives were considered for this component.") + '</p>') + '</div>';
+    if (n.failures && n.failures.length) body += '<div class="sec"><h4>Failure modes</h4><div class="fail">' + n.failures.map((f) => '<div><strong>' + esc(f.mode) + '</strong><span>' + esc(f.mitigation) + '</span></div>').join("") + '</div></div>';
+    if (n.breaks) body += '<div class="next"><h4 class="eyebrow" style="margin:0">What breaks next</h4><p>' + esc(n.breaks) + '</p>' + (n.trigger ? '<p class="trigger">Trigger: ' + esc(n.trigger) + '</p>' : "") + '</div>';
+    if (conns) body += '<div class="sec"><h4>Connections</h4><div class="conns">' + conns + '</div></div>';
+    m.innerHTML = '<div class="m-head"><span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+      '<div style="min-width:0"><h3 id="m-name">' + esc(n.label) + '</h3><div class="m-tech">' + esc(n.tech) + '</div></div>' +
+      '<button class="close" aria-label="Close details">' + CLOSE + '</button></div><div class="m-body">' + body + '</div>';
+    m.querySelector(".close").addEventListener("click", () => m.close());
+    m.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => openNode(b.dataset.go)));
+    if (!m.open) m.showModal();
+    m.querySelector(".close").focus();
+  }
+  $("modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $("modal").addEventListener("close", () => { if (opener && document.contains(opener)) opener.focus(); });
+
+  function cards() {
+    $("moves").innerHTML = tier.moves.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span>' + (x.driver ? '<span class="driver"><b>Driven by</b> ' + esc(x.driver) + '</span>' : "") + '<span class="trigger">Trigger: ' + esc(x.trigger) + '</span></li>').join("");
+    $("rejected").innerHTML = tier.rejected.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span></li>').join("");
+    const L = DESIGN.load;
+    $("load").innerHTML = '<tr><th></th>' + DESIGN.tiers.map((t) => '<th>' + esc(t.label) + '</th>').join("") + '</tr>' +
+      L.rows.map((r, i) => '<tr><td>' + esc(r) + '</td>' + DESIGN.tiers.map((t) => '<td class="num' + (t.id === tier.id ? " cur" : "") + '">' + esc(L.values[t.id][i]) + '</td>').join("") + '</tr>').join("");
+    $("load-note").textContent = L.note || "";
+  }
+
+  function show() {
+    const id = location.hash.slice(1);
+    tier = DESIGN.tiers.find((t) => t.id === id) || DESIGN.tiers[0];
+    DESIGN.tiers.forEach((t) => $("tab-" + t.id).setAttribute("aria-selected", String(t.id === tier.id)));
+    $("tier-title").textContent = tier.title;
+    $("tier-summary").textContent = tier.summary;
+    if ($("modal").open) $("modal").close();
+    $("canvas").classList.toggle("baseline", tier === DESIGN.tiers[0]); /* nothing changes at the first tier */
+    draw(); cards();
+  }
+  window.addEventListener("hashchange", show);
+  show();
+})();
+</script>

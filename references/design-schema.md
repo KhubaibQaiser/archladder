@@ -22,7 +22,7 @@
 |---|---|
 | `label` | The dimension, for example `"Connection model"`. |
 | `value` | The answer, for example `"Two-way persistent: live board plus presence"`. |
-| `source` | Ledger status: `"repo: path/to/file"`, `"brief"`, `"user"`, `"inferred"` or `"unknown"`. |
+| `source` | Ledger status: `"repo: path/to/file"`, `"brief"`, `"user"`, `"inferred"` or `"unknown"`. A short note may follow the status (`"inferred: not in the brief"`), but keep the reasoning in `drives`. |
 | `drives` | What this row changes in the design. |
 
 ## `zones[]`
@@ -90,7 +90,7 @@ Unchanged nodes in later tiers can keep `role: "Unchanged."` with empty arrays.
 | Field | Limit | Notes |
 |---|---|---|
 | `from`, `to` | | Node ids in the same tier. |
-| `label` | 14 chars | Optional. Longer labels are cut with an ellipsis. |
+| `label` | 10 chars | Optional. Longer labels are cut with an ellipsis. Labels sit in the 84px gap between columns, and the checker fails a label that covers a node or another label. |
 | `async` | | `true` for push, replication and background flows. Drawn dotted. |
 
 Edges between adjacent zones draw as curves. Edges in the same zone draw vertically, beside the

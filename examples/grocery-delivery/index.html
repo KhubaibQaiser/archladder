@@ -1,0 +1,2836 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Grocery Delivery System Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: problem header and requirements, tier switcher, zoned architecture canvas, then moves, rejections and load. */
+:root {
+  --bg: #eef1f6; --surface: #ffffff; --surface-2: #f6f8fb; --ink: #141b26; --ink-2: #4d5868; --line: #d3d9e3;
+  --accent: #3157d5; --accent-ink: #ffffff; --wire: #8a95a7;
+  --new: #0d7a4e; --changed: #b35c00; --removed: #a3324a;
+  --z-client: #e4ebff; --z-client-ink: #2f4fb8;
+  --z-edge: #e2f2f7; --z-edge-ink: #106579;
+  --z-app: #e6f4ea; --z-app-ink: #1f6b3a;
+  --z-data: #fdeedc; --z-data-ink: #8a4a06;
+  --z-services: #f1e8fb; --z-services-ink: #6a3aa8;
+  --lane: rgba(20, 27, 38, .035);
+  --shadow: 0 1px 2px rgba(20, 27, 38, .06), 0 4px 14px rgba(20, 27, 38, .06);
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c1118; --surface: #151c26; --surface-2: #1a222e; --ink: #e8edf4; --ink-2: #9ba7b8; --line: #2a3443;
+  --accent: #8aa4ff; --accent-ink: #0c1118; --wire: #5f6b7d;
+  --new: #4cd297; --changed: #f3ac55; --removed: #f27d95;
+  --z-client: #1c2747; --z-client-ink: #9fb5ff;
+  --z-edge: #12303a; --z-edge-ink: #7fd3e6;
+  --z-app: #15301f; --z-app-ink: #86d9a2;
+  --z-data: #36260f; --z-data-ink: #f6bd76;
+  --z-services: #2a1d40; --z-services-ink: #c9a6f7;
+  --lane: rgba(255, 255, 255, .03);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3); color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px }
+.wrap { max-width: 1440px; margin: 0 auto; display: grid; gap: 22px }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.15 }
+h1 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 700; letter-spacing: -.01em }
+h2 { font-size: 18px } h3 { font-size: 20px }
+p { margin: 0 }
+.muted { color: var(--ink-2) }
+.eyebrow { font: 600 11px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+button { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+header { display: grid; gap: 10px }
+.ai-warn { border: 1px solid var(--changed); background: color-mix(in srgb, var(--changed) 9%, var(--surface)); border-radius: 12px; padding: 12px 16px; font-size: 14px; max-width: 100%; overflow-wrap: anywhere }
+.ai-warn strong { color: var(--changed) }
+.alts { display: grid; gap: 8px }
+.alts div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--line) }
+.alts span { color: var(--ink-2); font-size: 14px }
+.reqs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px }
+.req { display: inline-flex; gap: 8px; align-items: baseline; min-width: 0; overflow-wrap: anywhere; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 13px; max-width: 100% }
+.req b { font: 600 11px var(--font-mono); color: var(--accent); white-space: nowrap; flex: none }
+
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between }
+.tabs { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 5px; flex-wrap: wrap }
+.tab { border: 0; background: transparent; border-radius: 8px; padding: 8px 14px; cursor: pointer; display: grid; gap: 1px; text-align: left; min-height: 44px }
+.tab .t { font: 700 16px var(--font-display) }
+.tab .l { font: 11px var(--font-mono); color: var(--ink-2) }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink) }
+.tab[aria-selected="true"] .l { color: inherit; opacity: .85 }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; min-height: 32px }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent) }
+
+.tier-head { display: grid; gap: 4px }
+.tier-head p { max-width: 85ch }
+
+.canvas-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow-x: auto; box-shadow: var(--shadow) }
+.canvas-fit { position: relative; margin: 0 auto }
+.canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0 }
+.lane { position: absolute; top: 12px; bottom: 12px; border-radius: 12px; background: var(--lane) }
+.lane-head { position: absolute; top: 22px; display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.lane-head i { width: 8px; height: 8px; border-radius: 50% }
+svg.wires { position: absolute; inset: 0; overflow: visible; pointer-events: none }
+.wire { fill: none; stroke: var(--wire); stroke-width: 1.6; transition: opacity .15s, stroke .15s }
+.wire.sync { stroke-dasharray: 7 5 }
+.wire.async { stroke-dasharray: 2 6; stroke-linecap: round; stroke-width: 2.2 }
+.wire-label rect { fill: var(--surface); stroke: var(--line) }
+.wire-label text { fill: var(--ink-2); font: 500 10.5px var(--font-mono) }
+@media (prefers-reduced-motion: no-preference) {
+  .wire.sync { animation: flow 1.4s linear infinite }
+  .wire.async { animation: flow 2.2s linear infinite }
+  @keyframes flow { to { stroke-dashoffset: -24 } }
+}
+
+.node { position: absolute; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; cursor: pointer; box-shadow: var(--shadow);
+  transition: transform .15s, opacity .15s, border-color .15s }
+.node:hover { border-color: var(--accent); transform: translateY(-2px) }
+.node .ic { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center }
+.node .ic svg { width: 24px; height: 24px }
+.node .nm { font: 600 14px/1.25 var(--font-body); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere }
+.node .tc { font: 11px/1.35 var(--font-mono); color: var(--ink-2); margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.node .st { z-index: 1; position: absolute; top: -9px; right: 10px; font: 700 9.5px var(--font-mono); letter-spacing: .08em; padding: 3px 7px; border-radius: 99px; color: var(--surface) }
+.node.new { border-color: var(--new); box-shadow: 0 0 0 3px color-mix(in srgb, var(--new) 22%, transparent), var(--shadow) }
+.node.new .st { background: var(--new) }
+.node.changed { border-color: var(--changed) }
+.node.changed .st { background: var(--changed) }
+.node.removed { border-style: dashed; opacity: .6 }
+.node.removed .st { background: var(--removed) }
+.node.removed .nm { text-decoration: line-through }
+.canvas.hovering .node:not(.hot), .canvas.only-changes:not(.baseline) .node.same { opacity: .32 }
+.canvas.hovering .wire:not(.hot), .canvas.hovering .wire-label:not(.hot) { opacity: .15 }
+.canvas.hovering .wire.hot { stroke: var(--accent) }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 20px; font-size: 12.5px; color: var(--ink-2); padding: 0 4px }
+.legend span { display: inline-flex; align-items: center; gap: 8px }
+.legend svg { width: 34px; height: 8px }
+
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 18px }
+.card.wide { grid-column: 1 / -1 }
+.card li, .card p, .m-body, .m-head h3 { overflow-wrap: anywhere }
+.profile { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px }
+.prof { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere }
+.prof .v { font: 600 14.5px/1.3 var(--font-body) }
+.prof .d { font-size: 13px; color: var(--ink-2) }
+.src { align-self: flex-start; margin-top: auto; position: relative; top: 4px; font: 600 10px/1.45 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; border: 1px solid currentColor; max-width: 100% }
+.src.repo { color: var(--z-edge-ink) } .src.brief { color: var(--z-client-ink) } .src.user { color: var(--new) } .src.inferred { color: var(--changed) } .src.unknown { color: var(--removed) }
+.driver { font-size: 13px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0 }
+.moves, .rejected { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px }
+.moves li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--changed) }
+.rejected li { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid var(--line) }
+.trigger { font: 12px var(--font-mono); color: var(--ink-2) }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2) }
+td.num { font: 13px var(--font-mono); font-variant-numeric: tabular-nums }
+td.cur { color: var(--accent); font-weight: 600 }
+.tablewrap { overflow-x: auto }
+
+dialog { border: 1px solid var(--line); border-radius: 18px; padding: 0; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(0, 0, 0, .28) }
+dialog::backdrop { background: rgba(8, 12, 18, .5) }
+.m-head { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 20px 20px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface) }
+.m-head .ic { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center }
+.m-head .ic svg { width: 30px; height: 30px }
+.m-tech { font: 12px var(--font-mono); color: var(--ink-2); margin-top: 4px }
+.close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; display: grid; place-items: center }
+.close svg { width: 18px; height: 18px }
+.m-body { padding: 18px 20px 22px; display: grid; gap: 18px }
+.pills { display: flex; flex-wrap: wrap; gap: 8px }
+.pill { font: 600 11px var(--font-mono); letter-spacing: .06em; padding: 3px 9px; border-radius: 99px; border: 1px solid currentColor }
+.pill.new { color: var(--new) } .pill.changed { color: var(--changed) } .pill.same { color: var(--ink-2) } .pill.removed { color: var(--removed) }
+.sec { display: grid; gap: 6px }
+.sec h4 { margin: 0; font: 600 11px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2) }
+.sec ul { margin: 0; padding-left: 18px; display: grid; gap: 4px }
+.serves { display: grid; gap: 6px }
+.serves div { background: var(--surface-2); border-radius: 8px; padding: 7px 10px; font-size: 14px }
+.serves b { font: 600 11px var(--font-mono); color: var(--accent); margin-right: 8px; white-space: nowrap }
+.fail { display: grid; gap: 8px }
+.fail div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--removed) }
+.fail span { color: var(--ink-2); font-size: 14px }
+.next { background: var(--surface-2); border-radius: 10px; padding: 12px; display: grid; gap: 4px }
+.conns { display: flex; flex-wrap: wrap; gap: 8px }
+.conn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer; min-height: 32px }
+.conn:hover { border-color: var(--accent) }
+</style>
+
+<div class="wrap">
+  <aside class="ai-warn" role="note"><strong>AI-generated suggestion.</strong> This design was drafted by an AI agent from the project context and the answers it was given. Numbers, costs and vendor limits are estimates. Treat it as a starting point for discussion: verify every choice against current vendor docs and your own measurements before acting on it.</aside>
+  <header>
+    <div class="eyebrow">System design · <span id="stack"></span></div>
+    <h1 id="title"></h1>
+    <p class="muted" id="problem" style="max-width:80ch"></p>
+    <div class="reqs" id="reqs"></div>
+  </header>
+
+  <section style="display:grid;gap:10px" aria-labelledby="prof-h">
+    <h2 id="prof-h">Workload profile <span class="muted" style="font:400 13px var(--font-body)">what drives the design at every tier</span></h2>
+    <div class="profile" id="profile"></div>
+  </section>
+
+  <div class="bar">
+    <div class="tabs" role="tablist" aria-label="Traffic tier" id="tabs"></div>
+    <label class="toggle"><input type="checkbox" id="only" checked> Highlight what changed</label>
+  </div>
+
+  <section class="tier-head" aria-live="polite">
+    <h2 id="tier-title" style="font-size:22px"></h2>
+    <p class="muted" id="tier-summary"></p>
+  </section>
+
+  <div class="canvas-wrap" id="cwrap"><div class="canvas-fit" id="cfit"><div class="canvas only-changes" id="canvas"></div></div></div>
+  <div class="legend" id="legend"></div>
+
+  <div class="grid3">
+    <section class="card"><h2>Recommended moves</h2><ul class="moves" id="moves"></ul></section>
+    <section class="card"><h2>Considered and left out</h2><ul class="rejected" id="rejected"></ul></section>
+    <section class="card wide"><h2>Load assumptions</h2><p class="muted" id="load-note" style="font-size:13.5px"></p><div class="tablewrap"><table id="load"></table></div></section>
+  </div>
+</div>
+
+<dialog id="modal" aria-labelledby="m-name"></dialog>
+
+<script>
+/* Replace only this object for a new design. Every node must name the requirements it serves.
+   zone: one of DESIGN.zones ids (the column). row: 0-based row inside the zone.
+   status: new | changed | same | removed. icon: a key of ICONS below. */
+const DESIGN = {
+  "title": "Grocery Delivery System Design",
+  "stack": "TypeScript (Node) on AWS ECS Fargate · Aurora Postgres · React Native",
+  "problem": "App-only grocery service. Customers order in a React Native app, pick a one-hour delivery slot up to seven days ahead and get the order from the company's own electric vans on fixed routes per neighbourhood, at supermarket prices with no minimum fee when a slot is shared. Each hub (warehouse) picks the night before. Customers can change an order until 22:00 the evening before delivery and track the van live on delivery day. The hard part is not raw load: a slot has fixed van capacity that must never be oversold, and holiday slot releases hit the same few rows with a 15x spike.",
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "Order in the app and pick a one-hour delivery slot up to 7 days ahead"
+    },
+    {
+      "id": "R2",
+      "text": "A slot's van capacity is never oversold; stock reserved at checkout, confirmed at picking"
+    },
+    {
+      "id": "R3",
+      "text": "Orders can be changed until 22:00 the evening before delivery"
+    },
+    {
+      "id": "R4",
+      "text": "Nightly pick lists per hub and route planning"
+    },
+    {
+      "id": "R5",
+      "text": "Live van tracking on delivery day, one-way, every 10 s"
+    },
+    {
+      "id": "R6",
+      "text": "Payment captured after delivery; receipts by email"
+    },
+    {
+      "id": "R7",
+      "text": "One country at 1k and 10k DAU, three countries from 100k, each with its own hubs; GDPR only"
+    },
+    {
+      "id": "R8",
+      "text": "Survive two daily peaks (4x average) and holiday slot releases (15x for 30 min)"
+    }
+  ],
+  "profile": [
+    {
+      "label": "Read to write ratio",
+      "value": "Read-heavy: 40 reads and 4 writes per customer per day (about 10:1)",
+      "source": "user",
+      "drives": "Reads scale with CDN, replicas and cache; sharding arrives late or never."
+    },
+    {
+      "label": "Connection model",
+      "value": "Request and response, plus one-way van tracking on delivery day",
+      "source": "user",
+      "drives": "No two-way persistent connections, so connection count is not the limit; tracking is the only push-like path."
+    },
+    {
+      "label": "Freshness",
+      "value": "Van position 10 s; browse, basket and slots: next look",
+      "source": "user",
+      "drives": "A cached 10 s poll meets tracking; slot availability can be briefly stale if reservation is exact."
+    },
+    {
+      "label": "Tenancy and key skew",
+      "value": "Hubs are the natural partition; popular slots and SKUs are hot keys at releases",
+      "source": "inferred: hub partition and hot keys follow from fixed van capacity per slot",
+      "drives": "country_id and hub_id in every key; hot-slot contention is the first write limit."
+    },
+    {
+      "label": "Traffic shape",
+      "value": "Two daily peaks (lunch, 19:00 to 22:00) at 4x average; holiday slot release 15x for 30 min",
+      "source": "user",
+      "drives": "Design for the spike, not the average: headroom, admission control, load shedding."
+    },
+    {
+      "label": "Spike stacking",
+      "value": "Spike is 15x the 24 h average, not stacked on the 4x peak",
+      "source": "inferred: brief says 15x spikes, not whether they stack; flips to 60x average if stacked",
+      "drives": "Sets spike requests per second in every tier (3.75x the daily peak)."
+    },
+    {
+      "label": "Consistency per path",
+      "value": "Slot capacity and stock: strong. Browse and counts: eventual.",
+      "source": "user",
+      "drives": "Reservation is one atomic conditional UPDATE in the primary; caches and replicas only for reads."
+    },
+    {
+      "label": "Latency budget",
+      "value": "p95 300 ms for browse and slots; 99.5% at 1k, 99.9% from 100k, 99.95% at 10M",
+      "source": "inferred: no target given; asked as a still-open item",
+      "drives": "Decides when per-country cells and cross-region standby are justified."
+    },
+    {
+      "label": "Geography and split",
+      "value": "One country, then three countries each with own hubs; busiest country assumed 50% of load",
+      "source": "user",
+      "drives": "Country is a cell boundary; the busiest country sets limits. The 50% share is inferred."
+    },
+    {
+      "label": "Data rules and growth",
+      "value": "GDPR only; about 1 order per 10 DAU per day, 30 lines per order, 13 months online",
+      "source": "inferred: order rate, lines and retention are not in the brief",
+      "drives": "Order lines reach 11B per year at 10M DAU, forcing partitioning and archiving."
+    },
+    {
+      "label": "Background work",
+      "value": "Nightly pick lists per hub, route planning, payment capture after delivery, email receipts",
+      "source": "user",
+      "drives": "Queues and workers off the request path; capture and receipts must be idempotent."
+    },
+    {
+      "label": "Team and cost",
+      "value": "12 engineers, prefers managed services",
+      "source": "user",
+      "drives": "Fargate, Aurora, SQS, SES over self-run clusters; Kubernetes and Kafka need a strong reason."
+    }
+  ],
+  "zones": [
+    {
+      "id": "client",
+      "label": "Devices"
+    },
+    {
+      "id": "edge",
+      "label": "Edge"
+    },
+    {
+      "id": "app",
+      "label": "Application"
+    },
+    {
+      "id": "data",
+      "label": "Data"
+    },
+    {
+      "id": "services",
+      "label": "Jobs and services"
+    }
+  ],
+  "load": {
+    "note": "Per customer per day: 40 reads + 4 writes = 44 actions. Average = DAU x 44 / 86,400. Peak = 4x average (lunch, 19:00 to 22:00). Slot-release spike = 15x average for 30 min, assumed not stacked on the peak (flips to 60x if stacked). Tracking viewers = 10% of DAU (inferred), polling every 10 s. Orders = 1 per 10 DAU per day, 30 lines per order (inferred). Busiest country = 50% of load from 100k (inferred). Targets are inferred.",
+    "rows": [
+      "Average requests/s",
+      "Peak requests/s (4x)",
+      "Peak reads / writes per s",
+      "Slot-release spike req/s (15x)",
+      "Spike writes/s (total, busiest country)",
+      "Tracking viewers / polls per s",
+      "Busiest country peak req/s",
+      "Orders per day",
+      "Order lines per year",
+      "Countries / cells",
+      "p95 and availability (inferred)"
+    ],
+    "values": {
+      "x1": [
+        "0.5",
+        "2",
+        "1.9 / 0.2",
+        "7.6",
+        "0.7 / 0.7",
+        "100 / 10",
+        "2 (one country)",
+        "100",
+        "1.1M",
+        "1 / 1",
+        "300 ms, 99.5%"
+      ],
+      "x10": [
+        "5.1",
+        "20",
+        "19 / 1.9",
+        "76",
+        "6.9 / 6.9",
+        "1k / 100",
+        "20 (one country)",
+        "1k",
+        "11M",
+        "1 / 1",
+        "300 ms, 99.5%"
+      ],
+      "x100": [
+        "51",
+        "204",
+        "185 / 18.5",
+        "764",
+        "69 / 35",
+        "10k / 1k",
+        "102",
+        "10k",
+        "110M",
+        "3 / 1 stack",
+        "300 ms, 99.9%"
+      ],
+      "x1000": [
+        "509",
+        "2,037",
+        "1,852 / 185",
+        "7,639",
+        "694 / 347",
+        "100k / 10k",
+        "1,019",
+        "100k",
+        "1.1B",
+        "3 / 3 cells",
+        "300 ms, 99.9%"
+      ],
+      "x10000": [
+        "5,093",
+        "20,370",
+        "18,519 / 1,852",
+        "76,389",
+        "6,944 / 3,472",
+        "1M / 100k",
+        "10,185",
+        "1M",
+        "11B",
+        "3 / 3 cells + standby",
+        "300 ms, 99.95%"
+      ]
+    }
+  },
+  "tiers": [
+    {
+      "id": "x1",
+      "label": "1x",
+      "short": "1k DAU",
+      "title": "1k DAU: one modular service and one database",
+      "summary": "A single Node service on Fargate, one Aurora Postgres writer and a pg-boss worker are enough: 2 requests/s at peak and 7.6/s in a slot-release spike. The one thing built properly from day one is exact slot reservation, because overselling a van is a business failure, not a load problem.",
+      "nodes": [
+        {
+          "id": "mob",
+          "label": "Customer app",
+          "tech": "React Native, iOS and Android",
+          "icon": "mobile",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R5"
+          ],
+          "alternatives": [
+            {
+              "what": "Progressive web app",
+              "why": "App-only product with live tracking and push; the team already ships React Native."
+            },
+            {
+              "what": "Native Swift and Kotlin",
+              "why": "Two codebases for a 12-person team."
+            }
+          ],
+          "role": "Browse, basket, slot picker, checkout, order edits and the live van map. Polls the van position every 10 s on delivery day.",
+          "specifics": [
+            "Idempotency key per checkout and per edit, kept across retries",
+            "Dates sent as plain YYYY-MM-DD with the hub's time zone for the 22:00 cutoff",
+            "Tracking screen polls GET /vans/:id/position every 10 s with jitter"
+          ],
+          "tradeoffs": [
+            "One codebase, but native map and background behaviour need care"
+          ],
+          "failures": [
+            {
+              "mode": "Double tap on checkout",
+              "mitigation": "Same idempotency key, server returns the first result"
+            },
+            {
+              "mode": "Network drop mid-checkout",
+              "mitigation": "Retry with the same key; show order status from the server"
+            }
+          ],
+          "breaks": "Nothing at this load.",
+          "trigger": "n/a",
+          "cost": "Store fees only; no infrastructure cost."
+        },
+        {
+          "id": "van",
+          "label": "Van GPS unit",
+          "tech": "Position ping every 10 s over HTTPS",
+          "icon": "broadcast",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R5"
+          ],
+          "alternatives": [
+            {
+              "what": "Driver phone app as the sender",
+              "why": "Not in the brief; the vans are the company's own, so a fixed GPS unit is assumed (inferred)."
+            }
+          ],
+          "role": "Each active van posts its position every 10 s. Assumed hardware; the brief only says customers see the van live.",
+          "specifics": [
+            "Authenticated per van with a device key",
+            "Posts {van_id, lat, lng, ts}; server keeps only the latest row per van"
+          ],
+          "tradeoffs": [
+            "Dropped pings mean a stale dot for 10 to 20 s"
+          ],
+          "failures": [
+            {
+              "mode": "Unit loses signal",
+              "mitigation": "App shows last-update age and greys the van after 60 s"
+            }
+          ],
+          "breaks": "Nothing at this load.",
+          "trigger": "n/a",
+          "cost": "Hardware cost not estimated."
+        },
+        {
+          "id": "alb",
+          "label": "Load balancer",
+          "tech": "AWS ALB, TLS from ACM, 2 AZs",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "API Gateway",
+              "why": "Per-request fee and a second layer to configure; the ALB feeds Fargate directly."
+            },
+            {
+              "what": "Nginx on EC2",
+              "why": "Self-run; the team prefers managed."
+            }
+          ],
+          "role": "TLS termination and health-checked routing to the API tasks.",
+          "specifics": [
+            "Health check on /healthz",
+            "Idle timeout 30 s"
+          ],
+          "tradeoffs": [
+            "No caching or rate limiting here"
+          ],
+          "failures": [
+            {
+              "mode": "A task fails health checks",
+              "mitigation": "ALB stops routing to it; ECS replaces it"
+            }
+          ],
+          "breaks": "Position polling load and bot traffic reach the API unfiltered.",
+          "trigger": "Tracking polls above half of API requests/s.",
+          "cost": "~$20/mo est. ($0.0225/h + LCUs, list price, unverified)"
+        },
+        {
+          "id": "api",
+          "label": "API service",
+          "tech": "Node/TypeScript on ECS Fargate, 2 tasks",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R5",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Lambda behind API Gateway",
+              "why": "Each concurrent invocation opens a Postgres connection and spike behaviour is harder to reason about."
+            },
+            {
+              "what": "EKS",
+              "why": "Cluster operations for a 12-person team with no stated need."
+            }
+          ],
+          "role": "One modular service: catalogue, basket, slots, checkout, order edits, van position. Reserves a slot and stock in a single SQL statement.",
+          "specifics": [
+            "Slot reserve: UPDATE slots SET booked = booked + 1 WHERE id = $1 AND booked < capacity, inside a short transaction",
+            "Stock reserve at checkout, confirmed at picking",
+            "Edits rejected after 22:00 in the hub time zone",
+            "Zod validation on every request; 2 tasks of 0.5 vCPU / 1 GB"
+          ],
+          "tradeoffs": [
+            "Monolith is easy to ship, but all paths share capacity"
+          ],
+          "failures": [
+            {
+              "mode": "Payment auth fails after reserve",
+              "mitigation": "Release the reservation in the same flow; a reaper frees reservations older than 15 min"
+            }
+          ],
+          "breaks": "Slot-release spikes need more tasks than 2.",
+          "trigger": "p95 above 300 ms or CPU above 60%.",
+          "cost": "~$36/mo est. (2 x $0.0247/h for 0.5 vCPU + 1 GB, list price, unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Aurora Postgres",
+          "tech": "Serverless v2, 1 writer, 0.5 to 4 ACU",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6"
+          ],
+          "alternatives": [
+            {
+              "what": "DynamoDB",
+              "why": "Conditional writes can guard capacity, but orders, pick lists and edits are relational and need joins."
+            },
+            {
+              "what": "RDS Postgres single instance",
+              "why": "Aurora Serverless v2 scales ACU for the daily peaks without a resize."
+            }
+          ],
+          "role": "Source of truth: hubs, slots, stock, orders, order lines, van positions and the pg-boss job tables.",
+          "specifics": [
+            "Unique key (order_id, idempotency_key)",
+            "Index slots (hub_id, starts_at)",
+            "Latest van position as one upserted row per van",
+            "Multi-AZ storage; no reader yet"
+          ],
+          "tradeoffs": [
+            "Jobs share the primary with traffic"
+          ],
+          "failures": [
+            {
+              "mode": "Writer failover",
+              "mitigation": "Aurora promotes in about a minute with no reader; the API retries safe reads"
+            }
+          ],
+          "breaks": "Reads dominate the single writer as DAU grows.",
+          "trigger": "Writer CPU above 60% sustained.",
+          "cost": "~$90/mo est. (1 ACU average x $0.12/ACU-h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "worker",
+          "label": "Worker",
+          "tech": "Node + pg-boss on Fargate, 1 task",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R4",
+            "R6"
+          ],
+          "alternatives": [
+            {
+              "what": "SQS plus Lambda",
+              "why": "A second system for 100 orders per day; pg-boss gives retries and cron on the database we have."
+            },
+            {
+              "what": "Run jobs inside the API tasks",
+              "why": "Pick-list generation would compete with request traffic."
+            }
+          ],
+          "role": "Nightly pick list per hub after the 22:00 cutoff, route planning, payment capture after delivery, receipt emails. pg-boss schedule() fires the nightly job.",
+          "specifics": [
+            "Capture keyed by order_id so a retry is a no-op",
+            "Receipts keyed by order_id, sent once",
+            "Retries with backoff, failed jobs kept for review"
+          ],
+          "tradeoffs": [
+            "Queue and data share one database"
+          ],
+          "failures": [
+            {
+              "mode": "Capture succeeds but marking fails",
+              "mitigation": "Retry looks up the provider charge by order_id before capturing again"
+            }
+          ],
+          "breaks": "Job tables add churn to the primary.",
+          "trigger": "Job table vacuum or lock time visible on writer.",
+          "cost": "~$9/mo est. (0.25 vCPU + 0.5 GB, list price, unverified)"
+        },
+        {
+          "id": "ses",
+          "label": "Receipt email",
+          "tech": "Amazon SES",
+          "icon": "mail",
+          "zone": "services",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "alternatives": [
+            {
+              "what": "Send through the payment provider",
+              "why": "Receipt content is ours and needs order lines."
+            }
+          ],
+          "role": "Delivers receipts after delivery.",
+          "specifics": [
+            "Verified domain, bounce handling"
+          ],
+          "tradeoffs": [
+            "Sending reputation is ours to manage"
+          ],
+          "failures": [
+            {
+              "mode": "Bounce or throttle",
+              "mitigation": "Job retries; hard bounces are suppressed"
+            }
+          ],
+          "breaks": "Nothing in the studied range.",
+          "trigger": "Bounce rate above 5%.",
+          "cost": "<$1/mo est. ($0.10 per 1,000 emails, list price)"
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Card auth at checkout, capture on delivery",
+          "icon": "key",
+          "zone": "services",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "alternatives": [
+            {
+              "what": "Capture at checkout",
+              "why": "Brief says capture after delivery, since order edits change the total."
+            }
+          ],
+          "role": "Authorises the card at checkout and captures the final amount after delivery. External; not named here.",
+          "specifics": [
+            "Idempotency key on every call",
+            "Authorisation hold sized for the edit window (a slot 7 days out may outlast the hold, so re-authorisation is an open question)"
+          ],
+          "tradeoffs": [
+            "Auth holds can expire before a slot seven days out"
+          ],
+          "failures": [
+            {
+              "mode": "Provider times out",
+              "mitigation": "Retry with the same key; order stays pending, never double-charged"
+            }
+          ],
+          "breaks": "Not a scale limit.",
+          "trigger": "Provider error rate above 1%.",
+          "cost": "Transaction fees not estimated."
+        }
+      ],
+      "edges": [
+        {
+          "from": "mob",
+          "to": "alb",
+          "label": "HTTPS"
+        },
+        {
+          "from": "van",
+          "to": "alb",
+          "label": "ping 10 s"
+        },
+        {
+          "from": "alb",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "db",
+          "label": "SQL"
+        },
+        {
+          "from": "api",
+          "to": "psp",
+          "label": "auth"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "jobs"
+        },
+        {
+          "from": "worker",
+          "to": "ses",
+          "label": "send"
+        },
+        {
+          "from": "worker",
+          "to": "psp",
+          "label": "capture"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Baseline: modular Node service, Aurora writer, pg-boss worker",
+          "why": "Smallest system that meets every requirement; atomic slot UPDATE makes overselling impossible without a lock service.",
+          "driver": "Consistency per path (strong for slots) and 2 requests/s peak",
+          "trigger": "n/a"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Lambda and API Gateway",
+          "why": "Spike of 15x opens many concurrent Postgres connections; Fargate tasks keep a small pool."
+        },
+        {
+          "what": "Redis for slot counters",
+          "why": "A second source of truth for capacity risks overselling when the cache and database disagree."
+        },
+        {
+          "what": "WebSockets for tracking",
+          "why": "Freshness is 10 s and one-way; polling needs no connection state at 100 viewers."
+        },
+        {
+          "what": "Kubernetes (EKS)",
+          "why": "No ops capacity stated; Fargate is enough for 2 tasks."
+        },
+        {
+          "what": "Read replica now",
+          "why": "1.9 reads/s at peak; one writer is far from busy."
+        }
+      ]
+    },
+    {
+      "id": "x10",
+      "label": "10x",
+      "short": "10k DAU",
+      "title": "10k DAU: a CDN in front of tracking",
+      "summary": "The API barely moves (20 requests/s at peak), but tracking does: 1,000 viewers polling every 10 s is 100 requests/s, five times the API peak, for data that is identical for everyone on a van. A CDN with a 5 s TTL fixes that, and Fargate autoscaling covers the 76 requests/s spike. Aurora and pg-boss stay as they are.",
+      "nodes": [
+        {
+          "id": "mob",
+          "label": "Customer app",
+          "tech": "React Native, iOS and Android",
+          "icon": "mobile",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "van",
+          "label": "Van GPS unit",
+          "tech": "Position ping every 10 s over HTTPS",
+          "icon": "broadcast",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "cdn",
+          "label": "CDN and WAF",
+          "tech": "CloudFront + WAF, 5 s TTL on van position",
+          "icon": "cloud",
+          "zone": "edge",
+          "row": 0,
+          "status": "new",
+          "serves": [
+            "R5",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Cache in the API (in-memory)",
+              "why": "Per-task caches miss across tasks and do not absorb polls before the ALB."
+            },
+            {
+              "what": "Send position over SSE",
+              "why": "10 s freshness is already met by a cached poll; no connections to hold."
+            }
+          ],
+          "role": "Caches van position for 5 s and the catalogue for 60 s, and applies WAF rate rules. All viewers of one van share one cached object.",
+          "specifics": [
+            "Cache key: van_id only; no cookies or auth in the key for position",
+            "Position endpoint returns only the van's dot, never customer data",
+            "WAF rate rule per IP on checkout and login paths"
+          ],
+          "tradeoffs": [
+            "Position is up to 5 s older than the van's ping"
+          ],
+          "failures": [
+            {
+              "mode": "Cache serves stale position",
+              "mitigation": "s-maxage 5 s with stale-if-error 30 s; the app greys a dot older than 60 s"
+            }
+          ],
+          "breaks": "Slot availability is per customer view and not cached here.",
+          "trigger": "Polls above 50% of API requests/s.",
+          "cost": "~$5/mo est. (100 viewers x 180 polls/day x $0.01 per 10k requests, list price, unverified)"
+        },
+        {
+          "id": "alb",
+          "label": "Load balancer",
+          "tech": "AWS ALB, TLS from ACM, 2 AZs",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "api",
+          "label": "API service",
+          "tech": "Node on ECS Fargate, 2 to 6 tasks",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R5",
+            "R8"
+          ],
+          "role": "Same service, now autoscaling on CPU so a slot-release spike gets tasks before p95 climbs.",
+          "specifics": [
+            "Target tracking at 60% CPU, scale-out cooldown 60 s",
+            "Pre-scale to 6 tasks 10 minutes before announced holiday releases"
+          ],
+          "tradeoffs": [
+            "Autoscaling lags 1 to 2 min, so pre-scale is still needed for the announced releases"
+          ],
+          "failures": [
+            {
+              "mode": "Scale-out too slow for a release",
+              "mitigation": "Scheduled scaling before announced releases; ALB queues briefly"
+            }
+          ],
+          "breaks": "Task count times pool size nears the database connection limit at 100k DAU.",
+          "trigger": "p95 above 300 ms during a release.",
+          "cost": "~$110/mo est. (average 3 tasks x $0.0247/h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Aurora Postgres",
+          "tech": "Serverless v2, 1 writer, 0.5 to 4 ACU",
+          "icon": "database",
+          "zone": "data",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "worker",
+          "label": "Worker",
+          "tech": "Node + pg-boss on Fargate, 1 task",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R4",
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "ses",
+          "label": "Receipt email",
+          "tech": "Amazon SES",
+          "icon": "mail",
+          "zone": "services",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Card auth at checkout, capture on delivery",
+          "icon": "key",
+          "zone": "services",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "mob",
+          "to": "cdn",
+          "label": "HTTPS"
+        },
+        {
+          "from": "van",
+          "to": "alb",
+          "label": "ping 10 s"
+        },
+        {
+          "from": "cdn",
+          "to": "alb",
+          "label": "origin"
+        },
+        {
+          "from": "alb",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "db",
+          "label": "SQL"
+        },
+        {
+          "from": "api",
+          "to": "psp",
+          "label": "auth"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "jobs"
+        },
+        {
+          "from": "worker",
+          "to": "ses",
+          "label": "send"
+        },
+        {
+          "from": "worker",
+          "to": "psp",
+          "label": "capture"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Put CloudFront with WAF in front; cache van position 5 s and catalogue 60 s",
+          "why": "1,000 viewers x one poll per 10 s is 100 requests/s against a 20 requests/s API peak, and every viewer of a van wants the same object.",
+          "driver": "Tracking polls per s (100) against peak requests/s (20); freshness 10 s",
+          "trigger": "Polls above 50% of API requests/s or origin CPU above 60%"
+        },
+        {
+          "what": "Autoscale the API from 2 to 6 tasks, pre-scale for announced releases",
+          "why": "The 15x spike is 76 requests/s, about 4x the daily peak; announced holiday releases can be scheduled for.",
+          "driver": "Slot-release spike 76 req/s (15x average)",
+          "trigger": "p95 above 300 ms or CPU above 60% during a release"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Aurora Serverless v2 with one writer and no reader",
+          "why": "19 reads/s and 1.9 writes/s at peak; a single writer is far from limits, so a reader would only add lag."
+        },
+        {
+          "what": "Stay on Fargate, no EKS or Lambda",
+          "why": "6 tasks at most; Fargate needs no cluster ops, and Lambda would multiply Postgres connections in a spike."
+        },
+        {
+          "what": "Stay on pg-boss, no SQS",
+          "why": "1k orders per day is 1 job every 90 s on average; jobs in the same database are simpler."
+        },
+        {
+          "what": "Redis cache for slot availability",
+          "why": "Reads are 19/s; Postgres serves them directly and a cache adds invalidation risk next to exact reservations."
+        },
+        {
+          "what": "SSE or WebSockets for tracking",
+          "why": "A cached 10 s poll costs about $5/mo est. and holds no connections at 1,000 viewers."
+        }
+      ]
+    },
+    {
+      "id": "x100",
+      "label": "100x",
+      "short": "100k DAU",
+      "title": "100k DAU: split reads from writes, add the country key",
+      "summary": "Reads are 185 requests/s at peak and 91% of traffic, and a release spike hits 764 requests/s, so a reader and a connection proxy arrive. The one-way change is the key: country_id and hub_id lead every key before three countries put real data in. Tracking is still handled by the CDN (1,000 polls/s at the edge).",
+      "nodes": [
+        {
+          "id": "mob",
+          "label": "Customer app",
+          "tech": "React Native, iOS and Android",
+          "icon": "mobile",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "van",
+          "label": "Van GPS unit",
+          "tech": "Position ping every 10 s over HTTPS",
+          "icon": "broadcast",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "cdn",
+          "label": "CDN and WAF",
+          "tech": "CloudFront + WAF, 5 s TTL on van position",
+          "icon": "cloud",
+          "zone": "edge",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R5",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "alb",
+          "label": "Load balancer",
+          "tech": "AWS ALB, TLS from ACM, 2 AZs",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "api",
+          "label": "API service",
+          "tech": "Node on ECS Fargate, 3 to 12 tasks",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R5",
+            "R7",
+            "R8"
+          ],
+          "role": "Same service, now routing reads to the reader and resolving the hub and country from every request.",
+          "specifics": [
+            "Read path to the reader; reserve, checkout and edit to the writer",
+            "country_id and hub_id taken from the hub record, never from client input",
+            "Autoscale 3 to 12 tasks at 60% CPU"
+          ],
+          "tradeoffs": [
+            "Two read paths to reason about for freshness"
+          ],
+          "failures": [
+            {
+              "mode": "Read-your-write miss",
+              "mitigation": "Session last-write timestamp sends the next 5 s of reads to the writer"
+            }
+          ],
+          "breaks": "Spike reads hammer the same hot slots.",
+          "trigger": "Reader CPU above 60%.",
+          "cost": "~$220/mo est. (average 6 tasks x $0.0247/h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "proxy",
+          "label": "RDS Proxy",
+          "tech": "Postgres, transaction pooling",
+          "icon": "funnel",
+          "zone": "data",
+          "row": 0,
+          "status": "new",
+          "serves": [
+            "R2",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "PgBouncer on Fargate",
+              "why": "Another service to run and patch; RDS Proxy is managed and IAM-aware."
+            },
+            {
+              "what": "Pool inside each task only",
+              "why": "Up to 12 tasks x 10 connections is manageable, but a spike plus task churn can burst past the Aurora limit."
+            }
+          ],
+          "role": "Multiplexes API connections onto fewer Aurora connections so a spike that adds tasks cannot exhaust the connection limit.",
+          "specifics": [
+            "Pool size per task 10, up to 12 tasks (120 client connections)",
+            "Workers connect straight to the writer because pg-boss uses advisory locks, which pin proxy connections"
+          ],
+          "tradeoffs": [
+            "Adds a hop of about 1 ms; session-level features get pinned"
+          ],
+          "failures": [
+            {
+              "mode": "Proxy unavailable",
+              "mitigation": "Multi-AZ; API fails fast with a 503 and the client retries with backoff"
+            }
+          ],
+          "breaks": "Not a limit; becomes per-country when cells arrive.",
+          "trigger": "Client connections above 70% of the Aurora limit.",
+          "cost": "~$44/mo est. (2 vCPU on the writer x $0.015/vCPU-h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Aurora Postgres",
+          "tech": "Serverless v2, 1 writer, 2 to 16 ACU",
+          "icon": "database",
+          "zone": "data",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6",
+            "R7"
+          ],
+          "role": "Same writer; keys now lead with country_id and hub_id so the data can later split by country without a rewrite.",
+          "specifics": [
+            "Composite keys (country_id, hub_id, ...) on slots, stock, orders",
+            "Reserve statement unchanged",
+            "Max ACU raised to 16 for spikes"
+          ],
+          "tradeoffs": [
+            "Wider keys cost a little index size"
+          ],
+          "failures": [
+            {
+              "mode": "Writer failover",
+              "mitigation": "About 30 s to promote the reader; API retries safe reads, checkouts show a retry state"
+            }
+          ],
+          "breaks": "Order lines pass 1B a year at 1M DAU; one primary serves three countries' spikes together.",
+          "trigger": "Writer CPU above 60% or p99 lock wait on hot slots above 50 ms.",
+          "cost": "~$260/mo est. (average 3 ACU x $0.12/ACU-h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "reader",
+          "label": "Aurora reader",
+          "tech": "Same cluster, 1 reader, auto-scale 1 to 2",
+          "icon": "database",
+          "zone": "data",
+          "row": 2,
+          "status": "new",
+          "serves": [
+            "R1",
+            "R4"
+          ],
+          "alternatives": [
+            {
+              "what": "Cache first",
+              "why": "At 185 reads/s a replica carries the reads with no invalidation logic."
+            },
+            {
+              "what": "Bigger writer only",
+              "why": "Reads are 91% of traffic; a replica separates them from checkout writes."
+            }
+          ],
+          "role": "Serves browse, basket and slot-list reads and the nightly pick-list queries.",
+          "specifics": [
+            "Reads that follow the user's own write (checkout, edit) go to the writer for 5 s via a last-write timestamp in the session",
+            "Replica lag alarm at 1 s",
+            "Pick lists read from the reader after the 22:00 cutoff"
+          ],
+          "tradeoffs": [
+            "Slot lists may be a second stale; reservation still checks the writer"
+          ],
+          "failures": [
+            {
+              "mode": "Replica lag grows",
+              "mitigation": "Route reads to the writer above 2 s lag"
+            }
+          ],
+          "breaks": "Hot slots read identically thousands of times per second at releases.",
+          "trigger": "Reader CPU above 60% or identical queries above 50%.",
+          "cost": "~$90/mo est. (1 ACU average x $0.12/ACU-h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "worker",
+          "label": "Worker",
+          "tech": "Node + pg-boss on Fargate, 2 tasks",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R4",
+            "R6"
+          ],
+          "role": "Same jobs; two tasks so pick lists for the three countries' hubs do not wait behind receipts, and the pick-list reads go to the reader.",
+          "specifics": [
+            "Queues per job type with separate concurrency",
+            "Pick lists read from the reader after 22:00 local time per hub"
+          ],
+          "tradeoffs": [
+            "Still sharing the writer for queue tables"
+          ],
+          "failures": [
+            {
+              "mode": "Pick list job fails halfway",
+              "mitigation": "Job is per hub and idempotent by (hub_id, delivery_date)"
+            }
+          ],
+          "breaks": "Queue table churn and post-delivery capture bursts load the writer.",
+          "trigger": "Writer shows pg-boss table lock or vacuum time.",
+          "cost": "~$18/mo est. (2 x 0.25 vCPU / 0.5 GB, list price, unverified)"
+        },
+        {
+          "id": "ses",
+          "label": "Receipt email",
+          "tech": "Amazon SES",
+          "icon": "mail",
+          "zone": "services",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Card auth at checkout, capture on delivery",
+          "icon": "key",
+          "zone": "services",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "mob",
+          "to": "cdn",
+          "label": "HTTPS"
+        },
+        {
+          "from": "van",
+          "to": "alb",
+          "label": "ping 10 s"
+        },
+        {
+          "from": "cdn",
+          "to": "alb",
+          "label": "origin"
+        },
+        {
+          "from": "alb",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "proxy",
+          "label": "pooled SQL"
+        },
+        {
+          "from": "proxy",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "proxy",
+          "to": "reader",
+          "label": "reads"
+        },
+        {
+          "from": "db",
+          "to": "reader",
+          "label": "replicate",
+          "async": true
+        },
+        {
+          "from": "api",
+          "to": "psp",
+          "label": "auth"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "jobs"
+        },
+        {
+          "from": "worker",
+          "to": "reader",
+        },
+        {
+          "from": "worker",
+          "to": "ses",
+          "label": "send"
+        },
+        {
+          "from": "worker",
+          "to": "psp",
+          "label": "capture"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Add an Aurora reader and route browse, basket and slot-list reads to it",
+          "why": "185 of 204 requests/s are reads; the writer should spend its time on reservations.",
+          "driver": "Read to write ratio 10:1 (185 reads/s at peak)",
+          "trigger": "Writer CPU above 60% with reads above 70% of queries"
+        },
+        {
+          "what": "Add RDS Proxy between the API and Aurora",
+          "why": "A spike adds tasks; 12 tasks x 10 connections plus task churn can exceed the connection limit at low ACU.",
+          "driver": "Slot-release spike 764 req/s and task count 3 to 12",
+          "trigger": "Connections above 70% of the Aurora limit"
+        },
+        {
+          "what": "Lead every key with country_id and hub_id before the second country launches",
+          "why": "One-way door: retrofitting a partition key later means a rewrite of the biggest tables.",
+          "driver": "Geography: three countries from 100k, each with own hubs",
+          "trigger": "Before the second country goes live"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Aurora Postgres (not DynamoDB or Aurora Limitless)",
+          "why": "69 spike writes/s and 18.5 writes/s at peak are small for one writer; relational orders and pick lists fit Postgres."
+        },
+        {
+          "what": "Stay on ECS Fargate (not EKS)",
+          "why": "12 tasks at most; the team of 12 prefers managed and has no cluster need yet."
+        },
+        {
+          "what": "Stay on pg-boss, no SQS yet",
+          "why": "10k orders per day is about 0.2 jobs/s; moving costs more than it saves until the writer is the bottleneck."
+        },
+        {
+          "what": "Valkey cache",
+          "why": "185 reads/s on a reader plus 60 s CDN catalogue caching is enough; a cache earns its place at 1M."
+        },
+        {
+          "what": "Separate stack per country",
+          "why": "204 requests/s total; three stacks triple ops for no load reason. Same region latency is inferred as acceptable."
+        },
+        {
+          "what": "SSE or WebSockets for tracking",
+          "why": "10,000 viewers polling is 1,000 requests/s on the CDN, about $50/mo est.; origin load is one hit per van per TTL."
+        }
+      ]
+    },
+    {
+      "id": "x1000",
+      "label": "1000x",
+      "short": "1M DAU",
+      "title": "1M DAU: country cells, a slot cache, queues",
+      "summary": "Peak is 2,037 requests/s and the busiest country takes about half. A slot release is 7,639 requests/s, mostly identical slot reads, with about 694 reservations/s. Each country becomes a cell so one release cannot slow the others, Valkey absorbs the hot-slot reads, and SQS takes jobs off the writer. Reservation stays one exact UPDATE.",
+      "nodes": [
+        {
+          "id": "mob",
+          "label": "Customer app",
+          "tech": "React Native, iOS and Android",
+          "icon": "mobile",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "van",
+          "label": "Van GPS unit",
+          "tech": "Position ping every 10 s over HTTPS",
+          "icon": "broadcast",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "cdn",
+          "label": "CDN and WAF",
+          "tech": "CloudFront + WAF, origin per country",
+          "icon": "cloud",
+          "zone": "edge",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R5",
+            "R7",
+            "R8"
+          ],
+          "role": "Routes each request to its country's cell by hostname; 100,000 viewers polling is 10,000 requests/s served at the edge.",
+          "specifics": [
+            "Origin per country cell",
+            "Position cached 5 s per van; origin hits bounded by vans, not viewers"
+          ],
+          "tradeoffs": [
+            "One more place to misroute if the country mapping is wrong"
+          ],
+          "failures": [
+            {
+              "mode": "Wrong country origin",
+              "mitigation": "Country from the hub record, not the device locale"
+            }
+          ],
+          "breaks": "Poll volume cost grows linearly with viewers.",
+          "trigger": "CDN request bill above compute bill for tracking.",
+          "cost": "~$540/mo est. (100k viewers x 180 polls/day x 30 days x $0.01 per 10k requests, list price, unverified)"
+        },
+        {
+          "id": "alb",
+          "label": "Load balancer",
+          "tech": "AWS ALB per country cell",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R8"
+          ],
+          "role": "One ALB per country cell, so a spike in one country cannot saturate another's.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": "~$60/mo est. (3 ALBs, list price, unverified)"
+        },
+        {
+          "id": "api",
+          "label": "API service",
+          "tech": "Node on Fargate, per cell, 4 to 30 tasks",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R5",
+            "R7",
+            "R8"
+          ],
+          "role": "Same service deployed once per country cell, with load shedding and per-hub admission on slot-release endpoints.",
+          "specifics": [
+            "Busiest cell: 1,019 requests/s peak, 3,820 requests/s spike",
+            "429 with Retry-After when the hub's token bucket is empty; app shows queue position",
+            "Reserve statement stays one conditional UPDATE, never held open across the payment call"
+          ],
+          "tradeoffs": [
+            "Shed requests are users told to wait; better than a stuck writer"
+          ],
+          "failures": [
+            {
+              "mode": "Release floods one hub",
+              "mitigation": "Per-hub token bucket sheds excess, other hubs unaffected"
+            }
+          ],
+          "breaks": "At 10M the same few slot rows take thousands of writes per second.",
+          "trigger": "p99 row-lock wait on slots above 50 ms.",
+          "cost": "~$1,800/mo est. (average 100 tasks across cells x $0.0247/h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "cache",
+          "label": "Slot cache",
+          "tech": "ElastiCache Valkey, 1 primary + 1 replica",
+          "icon": "zap",
+          "zone": "data",
+          "row": 3,
+          "status": "new",
+          "serves": [
+            "R1",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "More readers",
+              "why": "Releases make thousands of identical reads of a few hot slots; replicas repeat the same work."
+            },
+            {
+              "what": "DynamoDB DAX",
+              "why": "Does not front Postgres."
+            }
+          ],
+          "role": "Caches slot availability, catalogue and stock hints for hot hubs, and holds the per-hub admission token bucket during releases. Never the source of truth for capacity.",
+          "specifics": [
+            "Availability TTL 2 s with jitter, serve-stale while refreshing",
+            "Invalidate a slot key on each successful reserve",
+            "Key includes country_id and hub_id; no per-user data cached",
+            "Token bucket per hub release: admit N reserves per second"
+          ],
+          "tradeoffs": [
+            "Availability can read 2 s stale; reserve still checks the writer"
+          ],
+          "failures": [
+            {
+              "mode": "Cache down",
+              "mitigation": "Reads fall back to the reader; admission falls back to a static per-task limit and sheds load"
+            }
+          ],
+          "breaks": "At 10M the writer's hot rows, not reads, are the limit.",
+          "trigger": "Reader CPU above 60% or cache hit rate below 80% on slots.",
+          "cost": "~$190/mo est. (2 x cache.r7g.large at $0.13/h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "proxy",
+          "label": "RDS Proxy",
+          "tech": "Postgres, transaction pooling",
+          "icon": "funnel",
+          "zone": "data",
+          "row": 0,
+          "status": "new",
+          "serves": [
+            "R2",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "PgBouncer on Fargate",
+              "why": "Another service to run and patch; RDS Proxy is managed and IAM-aware."
+            },
+            {
+              "what": "Pool inside each task only",
+              "why": "Up to 12 tasks x 10 connections is manageable, but a spike plus task churn can burst past the Aurora limit."
+            }
+          ],
+          "role": "Multiplexes API connections onto fewer Aurora connections so a spike that adds tasks cannot exhaust the connection limit.",
+          "specifics": [
+            "Pool size per task 10, up to 12 tasks (120 client connections)",
+            "Workers connect straight to the writer because pg-boss uses advisory locks, which pin proxy connections"
+          ],
+          "tradeoffs": [
+            "Adds a hop of about 1 ms; session-level features get pinned"
+          ],
+          "failures": [
+            {
+              "mode": "Proxy unavailable",
+              "mitigation": "Multi-AZ; API fails fast with a 503 and the client retries with backoff"
+            }
+          ],
+          "breaks": "Not a limit; becomes per-country when cells arrive.",
+          "trigger": "Client connections above 70% of the Aurora limit.",
+          "cost": "~$44/mo est. (2 vCPU on the writer x $0.015/vCPU-h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "db",
+          "label": "Aurora Postgres",
+          "tech": "Per country cell, 1 writer, 2 readers",
+          "icon": "database",
+          "zone": "data",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6",
+            "R7"
+          ],
+          "role": "One cluster per country cell; order_lines partitioned monthly.",
+          "specifics": [
+            "pg_partman monthly partitions on order_lines; drop detached partitions after 13 months online (inferred retention)",
+            "Busiest cell about 600M order lines per year",
+            "Max 64 ACU per writer"
+          ],
+          "tradeoffs": [
+            "Cross-country reporting needs a separate path"
+          ],
+          "failures": [
+            {
+              "mode": "Cell writer failover",
+              "mitigation": "Only that country is affected; readers promote"
+            }
+          ],
+          "breaks": "Spike writes of 3,472/s in the busiest cell at 10M put heavy lock queues on hot slot rows.",
+          "trigger": "Writer CPU above 60% or lock waits.",
+          "cost": "~$1,900/mo est. (3 cells x 6 ACU average x $0.12/ACU-h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "reader",
+          "label": "Aurora reader",
+          "tech": "Per cell, 2 readers",
+          "icon": "database",
+          "zone": "data",
+          "row": 2,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R4"
+          ],
+          "role": "Two readers per cell for browse, pick lists and failover.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": "included in the cluster estimate above"
+        },
+        {
+          "id": "worker",
+          "label": "Worker",
+          "tech": "Node on Fargate, per cell, 2 to 8 tasks",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R4",
+            "R6"
+          ],
+          "role": "Consumes SQS jobs and relays the outbox; no longer polls queue tables on the writer.",
+          "specifics": [
+            "Concurrency per queue: pick lists 4, capture 20, receipts 10"
+          ],
+          "tradeoffs": [
+            "Outbox relay adds a tiny delay to job start"
+          ],
+          "failures": [
+            {
+              "mode": "Relay crashes between publish and mark",
+              "mitigation": "Duplicate message; consumers are idempotent"
+            }
+          ],
+          "breaks": "Not a limit here.",
+          "trigger": "Queue age above 5 min for capture.",
+          "cost": "~$150/mo est. (average 12 tasks, list price, unverified)"
+        },
+        {
+          "id": "queue",
+          "label": "Job queue",
+          "tech": "SQS + DLQ; EventBridge Scheduler 22:05",
+          "icon": "queue",
+          "zone": "services",
+          "row": 1,
+          "status": "new",
+          "serves": [
+            "R4",
+            "R6"
+          ],
+          "alternatives": [
+            {
+              "what": "Stay on pg-boss",
+              "why": "Queue tables churn on the writer; capture after a route ends is a burst of hundreds of jobs."
+            },
+            {
+              "what": "Kafka",
+              "why": "No replay or ordering need; SQS is managed and cheaper to run."
+            }
+          ],
+          "role": "Carries pick-list, capture and receipt jobs. EventBridge Scheduler drops one message per hub at 22:05 local time; an outbox row written in the order's transaction is relayed to SQS.",
+          "specifics": [
+            "Standard queues per job type, one DLQ each after 5 receives",
+            "Outbox table relayed by the worker; consumers idempotent by order_id or (hub_id, date)",
+            "Visibility timeout 6x job time"
+          ],
+          "tradeoffs": [
+            "At-least-once, so consumers must tolerate repeats"
+          ],
+          "failures": [
+            {
+              "mode": "Duplicate delivery",
+              "mitigation": "Idempotent consumers; capture looks up the provider charge first"
+            },
+            {
+              "mode": "Poison message",
+              "mitigation": "DLQ after 5 receives with an alarm"
+            }
+          ],
+          "breaks": "Not a scale limit in this range.",
+          "trigger": "Pg-boss table lock or vacuum time on the writer.",
+          "cost": "~$2/mo est. ($0.40 per million requests; ~4M requests, list price, unverified)"
+        },
+        {
+          "id": "ses",
+          "label": "Receipt email",
+          "tech": "Amazon SES",
+          "icon": "mail",
+          "zone": "services",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Card auth at checkout, capture on delivery",
+          "icon": "key",
+          "zone": "services",
+          "row": 3,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "mob",
+          "to": "cdn",
+          "label": "HTTPS"
+        },
+        {
+          "from": "van",
+          "to": "alb",
+          "label": "ping 10 s"
+        },
+        {
+          "from": "cdn",
+          "to": "alb",
+          "label": "origin"
+        },
+        {
+          "from": "alb",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "cache",
+          "label": "slots"
+        },
+        {
+          "from": "api",
+          "to": "proxy",
+          "label": "pooled SQL"
+        },
+        {
+          "from": "proxy",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "proxy",
+          "to": "reader",
+          "label": "reads"
+        },
+        {
+          "from": "db",
+          "to": "reader",
+          "label": "replicate",
+          "async": true
+        },
+        {
+          "from": "api",
+          "to": "psp",
+          "label": "auth"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "outbox"
+        },
+        {
+          "from": "worker",
+          "to": "reader",
+        },
+        {
+          "from": "queue",
+          "to": "worker",
+          "label": "consume",
+          "async": true
+        },
+        {
+          "from": "worker",
+          "to": "ses",
+          "label": "send"
+        },
+        {
+          "from": "worker",
+          "to": "psp",
+          "label": "capture"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Run one cell per country: own ALB, Fargate, Aurora cluster, cache and queues, in the nearest AWS region",
+          "why": "A holiday release in one country must not slow another, and the busiest country sets limits at 1,019 requests/s peak and about 3,800 in a spike.",
+          "driver": "Geography three countries; busiest country peak 1,019 req/s; spike 15x",
+          "trigger": "p95 from a far country over budget, or one country's spike degrading another"
+        },
+        {
+          "what": "Add ElastiCache Valkey for slot availability and per-hub admission tokens",
+          "why": "A release is mostly identical reads of a few hot slots (7,639 req/s total); replicas repeat the same work.",
+          "driver": "Read to write 10:1 and hot-key skew at releases",
+          "trigger": "Reader CPU above 60% or identical slot queries above 50%"
+        },
+        {
+          "what": "Admission control and load shedding on slot-release endpoints",
+          "why": "Protect the writer from a 30 minute burst of 347 reservations/s per cell; shed with 429 and Retry-After.",
+          "driver": "Traffic shape: 15x for 30 min",
+          "trigger": "p99 row-lock wait on slots above 50 ms"
+        },
+        {
+          "what": "Replace pg-boss with SQS + DLQ and an outbox, EventBridge Scheduler for 22:05",
+          "why": "Queue tables churn on the busiest writer, and capture after a route ends is a burst.",
+          "driver": "Background work: capture and receipts for 100k orders per day",
+          "trigger": "pg-boss table vacuum or lock time on the writer"
+        },
+        {
+          "what": "Partition order_lines monthly; drop detached partitions after 13 months",
+          "why": "1.1B lines per year across cells; deletes and vacuum on one table get slow.",
+          "driver": "Data growth: 1.1B order lines per year",
+          "trigger": "Autovacuum or index build time on order_lines above 1 hour"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Aurora Postgres (not DynamoDB or Limitless)",
+          "why": "347 spike writes/s per cell is within one writer, and orders and pick lists are relational."
+        },
+        {
+          "what": "Stay on ECS Fargate (not EKS)",
+          "why": "About 100 tasks across cells; Fargate premium is small next to the cost of running clusters for 12 engineers."
+        },
+        {
+          "what": "Valkey as the source of truth for slot capacity",
+          "why": "A cache loss would lose reservations; capacity must be exact, so Postgres owns it."
+        },
+        {
+          "what": "SSE or WebSockets for tracking",
+          "why": "100,000 viewers polling is 10,000 requests/s on the edge, about $540/mo est.; a connection tier would cost more to run than it saves."
+        },
+        {
+          "what": "Kafka for jobs",
+          "why": "No replay or multi-consumer need; SQS with a DLQ is enough and managed."
+        },
+        {
+          "what": "Active-active multi-region writes",
+          "why": "Each hub has one home country; no user writes to two cells."
+        }
+      ]
+    },
+    {
+      "id": "x10000",
+      "label": "10000x",
+      "short": "10M DAU",
+      "title": "10M DAU: serialise hot slots, standby per cell",
+      "summary": "Peak is 20,370 requests/s and a release spike is 76,389, with about 3,472 reservations/s in the busiest cell, all on a few hot slots. Row locks stop being acceptable, so reservations go through an SQS FIFO queue grouped by slot. Each cell gains a standby region, and order lines (11B per year) get archived. Tracking stays on the CDN.",
+      "nodes": [
+        {
+          "id": "mob",
+          "label": "Customer app",
+          "tech": "React Native, iOS and Android",
+          "icon": "mobile",
+          "zone": "client",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R3",
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "van",
+          "label": "Van GPS unit",
+          "tech": "Position ping every 10 s over HTTPS",
+          "icon": "broadcast",
+          "zone": "client",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R5"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "cdn",
+          "label": "CDN and WAF",
+          "tech": "CloudFront + WAF, origin per country",
+          "icon": "cloud",
+          "zone": "edge",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R5",
+            "R7",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "alb",
+          "label": "Load balancer",
+          "tech": "AWS ALB per country cell",
+          "icon": "balancer",
+          "zone": "edge",
+          "row": 1,
+          "status": "same",
+          "serves": [
+            "R1",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "api",
+          "label": "API service",
+          "tech": "Node on Fargate, per cell, 20 to 150 tasks",
+          "icon": "server",
+          "zone": "app",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R5",
+            "R7",
+            "R8"
+          ],
+          "role": "Same service; slot reservation now enqueues to FIFO instead of writing directly during releases.",
+          "specifics": [
+            "Busiest cell: 10,185 requests/s peak, 38,000 in a spike",
+            "Direct UPDATE path kept for normal load, queue path switched on per hub by a flag"
+          ],
+          "tradeoffs": [
+            "Two reservation paths to test"
+          ],
+          "failures": [
+            {
+              "mode": "Queue path fails",
+              "mitigation": "Flag flips the hub back to the direct path with load shedding"
+            }
+          ],
+          "breaks": "Not a limit with cells.",
+          "trigger": "Task count above 150 in a cell.",
+          "cost": "~$18,000/mo est. (about 1,000 tasks average across cells x $0.0247/h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "reserve",
+          "label": "Reservation workers",
+          "tech": "Node on Fargate, consume SQS FIFO by slot",
+          "icon": "worker",
+          "zone": "app",
+          "row": 1,
+          "status": "new",
+          "serves": [
+            "R2",
+            "R8"
+          ],
+          "alternatives": [
+            {
+              "what": "Row locks and retries in the API",
+              "why": "At 3,472 reserves/s in one cell, hot slot rows queue connections and starve other traffic."
+            },
+            {
+              "what": "Valkey Lua counter as the gate",
+              "why": "Two sources of truth for capacity; a failover could oversell."
+            }
+          ],
+          "role": "Applies slot and stock reservations one slot at a time. The SQS FIFO message group is the slot id, so one slot is serial and different slots run in parallel.",
+          "specifics": [
+            "FIFO queue, MessageGroupId = slot_id, deduplication id = idempotency key",
+            "Same conditional UPDATE as before, now with no lock contention",
+            "API returns 202 with a reservation id; app shows the result when polled"
+          ],
+          "tradeoffs": [
+            "Checkout becomes asynchronous for releases; the app must show a pending state"
+          ],
+          "failures": [
+            {
+              "mode": "Consumer crashes mid-message",
+              "mitigation": "Visibility timeout returns it; the idempotency key makes the retry a no-op"
+            }
+          ],
+          "breaks": "One slot group is capped near 300 messages/s; fine since a slot has bounded capacity.",
+          "trigger": "Row-lock wait p99 above 100 ms or deadlocks on slots.",
+          "cost": "~$900/mo est. (average 50 tasks x $0.0247/h x 730 h; SQS ~$0.50 per million FIFO requests, list price, unverified)"
+        },
+        {
+          "id": "cache",
+          "label": "Slot cache",
+          "tech": "Valkey cluster mode, 3 shards per cell",
+          "icon": "zap",
+          "zone": "data",
+          "row": 3,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R8"
+          ],
+          "role": "Sharded by hub so one cache node does not carry all hot slots.",
+          "specifics": [
+            "3 shards x 1 replica per cell",
+            "Reserve workers invalidate slot keys after commit"
+          ],
+          "tradeoffs": [
+            "Resharding is manual"
+          ],
+          "failures": [
+            {
+              "mode": "Shard loss",
+              "mitigation": "Reads fall back to readers, admission uses static limits"
+            }
+          ],
+          "breaks": "Not a limit in this range.",
+          "trigger": "Cache CPU above 70%.",
+          "cost": "~$3,400/mo est. (9 shards x 2 nodes x cache.r7g.large $0.13/h x 730 h, list price, unverified)"
+        },
+        {
+          "id": "proxy",
+          "label": "RDS Proxy",
+          "tech": "Postgres, transaction pooling",
+          "icon": "funnel",
+          "zone": "data",
+          "row": 0,
+          "status": "same",
+          "serves": [
+            "R2",
+            "R8"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "db",
+          "label": "Aurora Postgres",
+          "tech": "Per cell, provisioned writer, 3 readers",
+          "icon": "database",
+          "zone": "data",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R2",
+            "R3",
+            "R4",
+            "R5",
+            "R6",
+            "R7"
+          ],
+          "role": "Provisioned instances in place of Serverless v2, a cross-region standby per cell, and archiving of old order lines.",
+          "specifics": [
+            "Aurora Global Database standby per cell, target RPO about 1 s, RTO minutes (est., unverified)",
+            "Detached partitions exported to S3 as Parquet after 13 months, then dropped",
+            "Busiest cell about 5.5B order lines per year"
+          ],
+          "tradeoffs": [
+            "Standby doubles storage cost; provisioned loses automatic ACU scaling"
+          ],
+          "failures": [
+            {
+              "mode": "Region loss",
+              "mitigation": "Promote the standby; in-flight reservations replay from SQS FIFO"
+            }
+          ],
+          "breaks": "Cross-cell reporting is not supported.",
+          "trigger": "Availability target 99.95%; average ACU above 60% of max for 30 days.",
+          "cost": "~$30,000/mo est. (3 cells x 4 db.r7g.4xlarge x $2.00/h x 730 h plus standby, list price, unverified)"
+        },
+        {
+          "id": "reader",
+          "label": "Aurora reader",
+          "tech": "Per cell, 3 readers",
+          "icon": "database",
+          "zone": "data",
+          "row": 2,
+          "status": "changed",
+          "serves": [
+            "R1",
+            "R4"
+          ],
+          "role": "Three readers per cell.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "worker",
+          "label": "Worker",
+          "tech": "Node on Fargate, per cell, 10 to 60 tasks",
+          "icon": "worker",
+          "zone": "services",
+          "row": 0,
+          "status": "changed",
+          "serves": [
+            "R4",
+            "R6"
+          ],
+          "role": "Same jobs at higher concurrency; pick lists fan out one message per hub.",
+          "specifics": [
+            "Capture concurrency 200 per cell"
+          ],
+          "tradeoffs": [
+            "More tasks to watch"
+          ],
+          "failures": [
+            {
+              "mode": "Capture backlog after routes end",
+              "mitigation": "Autoscale on queue age"
+            }
+          ],
+          "breaks": "Not a limit here.",
+          "trigger": "Queue age above 5 min.",
+          "cost": "~$1,500/mo est. (about 80 tasks, list price, unverified)"
+        },
+        {
+          "id": "queue",
+          "label": "Queues",
+          "tech": "SQS standard + FIFO by slot, DLQs",
+          "icon": "queue",
+          "zone": "services",
+          "row": 1,
+          "status": "changed",
+          "serves": [
+            "R2",
+            "R4",
+            "R6"
+          ],
+          "role": "Adds a FIFO queue for reservations beside the job queues.",
+          "specifics": [
+            "FIFO high-throughput mode, group = slot_id",
+            "Standard queues unchanged"
+          ],
+          "tradeoffs": [
+            "Ordering only within a slot, which is what capacity needs"
+          ],
+          "failures": [
+            {
+              "mode": "FIFO backlog during a release",
+              "mitigation": "Autoscale reservation workers on queue age; app shows queue position"
+            }
+          ],
+          "breaks": "Not a limit in this range.",
+          "trigger": "Oldest message age above 10 s.",
+          "cost": "~$300/mo est. (about 600M requests/mo at $0.50 per million, list price, unverified)"
+        },
+        {
+          "id": "ses",
+          "label": "Receipt email",
+          "tech": "Amazon SES",
+          "icon": "mail",
+          "zone": "services",
+          "row": 2,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        },
+        {
+          "id": "psp",
+          "label": "Payment provider",
+          "tech": "Card auth at checkout, capture on delivery",
+          "icon": "key",
+          "zone": "services",
+          "row": 3,
+          "status": "same",
+          "serves": [
+            "R6"
+          ],
+          "role": "Unchanged.",
+          "specifics": [],
+          "tradeoffs": [],
+          "failures": [],
+          "breaks": "",
+          "trigger": "",
+          "cost": ""
+        }
+      ],
+      "edges": [
+        {
+          "from": "mob",
+          "to": "cdn",
+          "label": "HTTPS"
+        },
+        {
+          "from": "van",
+          "to": "alb",
+          "label": "ping 10 s"
+        },
+        {
+          "from": "cdn",
+          "to": "alb",
+          "label": "origin"
+        },
+        {
+          "from": "alb",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "cache",
+          "label": "slots"
+        },
+        {
+          "from": "api",
+          "to": "queue",
+          "label": "reserve"
+        },
+        {
+          "from": "queue",
+          "to": "reserve",
+          "label": "by slot",
+          "async": true
+        },
+        {
+          "from": "reserve",
+          "to": "proxy",
+          "label": "SQL"
+        },
+        {
+          "from": "reserve",
+          "to": "cache",
+          "label": "invalidate"
+        },
+        {
+          "from": "api",
+          "to": "proxy",
+          "label": "pooled SQL"
+        },
+        {
+          "from": "proxy",
+          "to": "db",
+          "label": "writes"
+        },
+        {
+          "from": "proxy",
+          "to": "reader",
+          "label": "reads"
+        },
+        {
+          "from": "db",
+          "to": "reader",
+          "label": "replicate",
+          "async": true
+        },
+        {
+          "from": "api",
+          "to": "psp",
+          "label": "auth"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "outbox"
+        },
+        {
+          "from": "worker",
+          "to": "reader",
+        },
+        {
+          "from": "queue",
+          "to": "worker",
+          "label": "consume",
+          "async": true
+        },
+        {
+          "from": "worker",
+          "to": "ses",
+          "label": "send"
+        },
+        {
+          "from": "worker",
+          "to": "psp",
+          "label": "capture"
+        }
+      ],
+      "moves": [
+        {
+          "what": "Serialise reservations per slot with an SQS FIFO queue (group = slot id) and reservation workers",
+          "why": "About 3,472 reservations/s in the busiest cell land on a few hot slots; row-lock queues would starve the pool and block unrelated traffic.",
+          "driver": "Spike writes 3,472/s in the busiest country; never oversold",
+          "trigger": "Row-lock wait p99 above 100 ms or deadlocks on slots"
+        },
+        {
+          "what": "Add an Aurora Global Database standby per cell",
+          "why": "Availability target rises to 99.95% and one region is no longer enough for a 10M-user service.",
+          "driver": "Latency and availability target (inferred 99.95%)",
+          "trigger": "Availability target set above what one region can meet"
+        },
+        {
+          "what": "Export order lines older than 13 months to S3 and drop the partitions",
+          "why": "11B lines per year; the busiest cell holds about 5.5B and backups and index builds slow.",
+          "driver": "Data growth: 11B order lines per year; retention 13 months (inferred)",
+          "trigger": "Backup or index build time above its window"
+        },
+        {
+          "what": "Move the writer from Serverless v2 to provisioned instances with reserved pricing",
+          "why": "The load is high all day (4x peak on a high average), so ACU billing costs more than fixed instances.",
+          "driver": "Traffic shape: daily cycle, average above 5,000 req/s",
+          "trigger": "Average ACU above 60% of max for 30 days"
+        }
+      ],
+      "rejected": [
+        {
+          "what": "Stay on Aurora Postgres (not DynamoDB)",
+          "why": "DynamoDB could guard capacity, but orders, edits and pick lists are relational; the FIFO queue removes the hot-row problem instead."
+        },
+        {
+          "what": "Aurora Limitless or sharding inside a country",
+          "why": "3,472 writes/s serialised per slot fits one writer per cell; sharding is cost with no trigger."
+        },
+        {
+          "what": "Stay on cached polling for tracking (not WebSockets or AppSync)",
+          "why": "1M viewers x 180 polls is about $5,400/mo est. at the CDN; managed push is the same order of cost (est., unverified) and adds connection state."
+        },
+        {
+          "what": "Stay on ECS Fargate (not EKS)",
+          "why": "About 1,000 tasks is a real bill, but the team of 12 prefers managed; revisit with Savings Plans before Kubernetes."
+        },
+        {
+          "what": "Kafka or Kinesis for van positions",
+          "why": "Vans are few and write one row each every 10 s; the CDN absorbs the reads."
+        },
+        {
+          "what": "Active-active multi-region writes",
+          "why": "Each hub has one home cell; a standby gives recovery without conflict resolution."
+        }
+      ]
+    }
+  ]
+};</script>
+<script>
+(function () {
+  const ICONS = {
+    browser: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r=".6"/><circle cx="9" cy="6.5" r=".6"/>',
+    mobile: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
+    shield: '<path d="M12 3l7.5 3v6c0 4.6-3.1 7.7-7.5 9.2C7.6 19.7 4.5 16.6 4.5 12V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+    balancer: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M12 7.2v9.6M12 11l-6.2 6M12 11l6.2 6"/>',
+    lambda: '<path d="M6 4h3.5L18 20"/><path d="M12.3 10.5L7 20"/>',
+    server: '<rect x="4" y="3.5" width="16" height="7" rx="1.8"/><rect x="4" y="13.5" width="16" height="7" rx="1.8"/><path d="M8 7h.01M8 17h.01M12 7h4M12 17h4"/>',
+    worker: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+    database: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13"/><path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 5 9-5" opacity=".55"/>',
+    funnel: '<path d="M3.5 4.5h17l-6.5 8v6l-4 2v-8z"/>',
+    zap: '<path d="M13.5 2.5L4.5 14h7l-1 7.5 9-11.5h-7z"/>',
+    queue: '<rect x="3" y="4.5" width="18" height="4" rx="1.2"/><rect x="3" y="10.5" width="18" height="4" rx="1.2"/><rect x="3" y="16.5" width="11" height="4" rx="1.2"/>',
+    broadcast: '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+    gateway: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+    key: '<circle cx="8" cy="15.5" r="4.2"/><path d="M11 12.5l9-9M16.5 7l3 3"/>',
+    storage: '<path d="M3 7.5l9-4.5 9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2.2"/><path d="M3.5 6.5l8.5 6 8.5-6"/>',
+    cloud: '<path d="M7 18.5h10.5a4 4 0 0 0 .6-8A6.2 6.2 0 0 0 6.2 9.6 4.5 4.5 0 0 0 7 18.5z"/>',
+    chart: '<path d="M4 20V11M10 20V5M16 20v-7M21.5 20h-19"/>',
+    breaker: '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="16" cy="12" r="2.3"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'
+  };
+  const svgIcon = (k, cls) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (cls ? ' class="' + cls + '"' : '') + '>' + (ICONS[k] || ICONS.cloud) + '</svg>';
+  const CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  const NW = 216, NH = 112, CW = 300, RH = 136, TOP = 58, PADX = 20, PADB = 24, CH = 20, GAP = CW - NW;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const zoneIdx = Object.fromEntries(DESIGN.zones.map((z, i) => [z.id, i]));
+  const reqText = Object.fromEntries(DESIGN.requirements.map((r) => [r.id, r.text]));
+  let tier = DESIGN.tiers[0], opener = null;
+
+  $("title").textContent = DESIGN.title;
+  $("stack").textContent = DESIGN.stack;
+  $("problem").textContent = DESIGN.problem;
+  $("reqs").innerHTML = DESIGN.requirements.map((r) => '<span class="req"><b>' + esc(r.id) + '</b>' + esc(r.text) + '</span>').join("");
+
+  const SRC = (s) => (String(s).toLowerCase().match(/^(repo|brief|user|inferred|unknown)/) || [, "unknown"])[1];
+  $("profile").innerHTML = (DESIGN.profile || []).map((p) => '<div class="prof"><span class="eyebrow">' + esc(p.label) + '</span><span class="v">' + esc(p.value) + '</span><span class="d">' + esc(p.drives) + '</span><span class="src ' + SRC(p.source) + '">' + esc(p.source) + '</span></div>').join("");
+
+  DESIGN.tiers.forEach((t) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.setAttribute("role", "tab"); b.id = "tab-" + t.id;
+    b.innerHTML = '<span class="t">' + esc(t.label) + '</span><span class="l">' + esc(t.short) + '</span>';
+    b.addEventListener("click", () => { location.hash = t.id; });
+    $("tabs").appendChild(b);
+  });
+
+  $("legend").innerHTML =
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="1.6" stroke-dasharray="7 5"/></svg>Request path</span>' +
+    '<span><svg viewBox="0 0 34 8"><path d="M1 4h32" stroke="var(--wire)" stroke-width="2.2" stroke-dasharray="2 6" stroke-linecap="round"/></svg>Async or push</span>' +
+    '<span><b style="color:var(--new)">NEW</b> added at this tier</span><span><b style="color:var(--changed)">CHANGED</b> reconfigured</span><span><b style="color:var(--removed)">REMOVED</b> no longer needed</span>';
+
+  $("only").addEventListener("change", (e) => $("canvas").classList.toggle("only-changes", e.target.checked));
+
+  const pos = (n) => ({ x: PADX + zoneIdx[n.zone] * CW + (CW - NW) / 2, y: TOP + n.row * RH });
+
+  function bez(x1, y1, c1x, c1y, c2x, c2y, x2, y2) {
+    const t = 0.5, m = 0.5, mx = m * m * m * x1 + 3 * m * m * t * c1x + 3 * m * t * t * c2x + t * t * t * x2;
+    const my = m * m * m * y1 + 3 * m * m * t * c1y + 3 * m * t * t * c2y + t * t * t * y2;
+    return { d: "M" + x1 + "," + y1 + " C" + c1x + "," + c1y + " " + c2x + "," + c2y + " " + x2 + "," + y2, mx, my };
+  }
+  function rounded(pts, r) {
+    let d = "M" + pts[0][0] + "," + pts[0][1];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+      const r1 = Math.min(r, Math.hypot(x - px, y - py) / 2, Math.hypot(nx - x, ny - y) / 2);
+      const ax = x - Math.sign(x - px) * r1, ay = y - Math.sign(y - py) * r1;
+      const bx = x + Math.sign(nx - x) * r1, by = y + Math.sign(ny - y) * r1;
+      d += " L" + ax + "," + ay + " Q" + x + "," + y + " " + bx + "," + by;
+    }
+    const last = pts[pts.length - 1];
+    return d + " L" + last[0] + "," + last[1];
+  }
+  /* Adjacent columns get a curve, same column a vertical curve, longer spans run along a channel under the nodes. */
+  function wirePath(a, b, k, channelTop) {
+    const pa = pos(a), pb = pos(b), ca = zoneIdx[a.zone], cb = zoneIdx[b.zone];
+    if (ca === cb && Math.abs(a.row - b.row) > 1) {
+      const xr = pa.x + NW, gx = xr + 18, ya = pa.y + NH / 2, yb = pb.y + NH / 2;
+      return { d: rounded([[xr, ya], [gx, ya], [gx, yb], [xr, yb]], 10), mx: gx, my: (ya + yb) / 2, side: true, inset: true };
+    }
+    if (ca === cb) {
+      const down = pb.y > pa.y, x = pa.x + NW / 2, y1 = down ? pa.y + NH : pa.y, y2 = down ? pb.y : pb.y + NH;
+      return Object.assign(bez(x, y1, x, y1 + (down ? 20 : -20), x, y2 + (down ? -20 : 20), x, y2), { side: true });
+    }
+    const right = cb > ca, y1 = pa.y + NH / 2, y2 = pb.y + NH / 2;
+    const x1 = right ? pa.x + NW : pa.x, x2 = right ? pb.x : pb.x + NW;
+    if (Math.abs(cb - ca) === 1) {
+      const d = GAP / 2;
+      return bez(x1, y1, x1 + (right ? d : -d), y1, x2 + (right ? -d : d), y2, x2, y2);
+    }
+    const off = (k % 4) * 6 - 9;
+    const g1 = x1 + (right ? GAP / 2 : -GAP / 2) + off, g2 = x2 + (right ? -GAP / 2 : GAP / 2) - off;
+    const cy = channelTop + k * CH;
+    return { d: rounded([[x1, y1], [g1, y1], [g1, cy], [g2, cy], [g2, y2], [x2, y2]], 10), mx: (g1 + g2) / 2, my: cy };
+  }
+
+  function draw() {
+    const c = $("canvas");
+    const maxRow = Math.max(...tier.nodes.map((n) => n.row));
+    const byId0 = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    const long = tier.edges.filter((e) => byId0[e.from] && byId0[e.to] && Math.abs(zoneIdx[byId0[e.from].zone] - zoneIdx[byId0[e.to].zone]) > 1);
+    const channelTop = TOP + maxRow * RH + NH + 28;
+    const W = PADX * 2 + DESIGN.zones.length * CW, H = channelTop + Math.max(0, long.length - 1) * CH + (long.length ? 24 : 0) + PADB - (long.length ? 0 : 28);
+    c.style.width = W + "px"; c.style.height = H + "px";
+    fit(W, H);
+    let html = "";
+    DESIGN.zones.forEach((z, i) => {
+      html += '<div class="lane" style="left:' + (PADX + i * CW + 6) + 'px;width:' + (CW - 12) + 'px"></div>';
+      html += '<div class="lane-head" style="left:' + (PADX + i * CW + 18) + 'px"><i style="background:var(--z-' + z.id + '-ink)"></i>' + esc(z.label) + '</div>';
+    });
+    const byId = Object.fromEntries(tier.nodes.map((n) => [n.id, n]));
+    let wires = "", labels = "";
+    tier.edges.forEach((e) => {
+      const a = byId[e.from], b = byId[e.to];
+      if (!a || !b) return;
+      const w = wirePath(a, b, long.indexOf(e), channelTop);
+      const cls = 'wire ' + (e.async ? "async" : "sync");
+      wires += '<path class="' + cls + '" data-a="' + e.from + '" data-b="' + e.to + '" d="' + w.d + '" marker-end="url(#ah)"/>';
+      if (e.label) {
+        const txt = e.label.length > 10 ? e.label.slice(0, 9) + "…" : e.label;
+        const tw = txt.length * 6.4 + 14, lx = w.inset ? w.mx + 4 + tw / 2 : w.side ? w.mx + 8 + tw / 2 : w.mx;
+        labels += '<g class="wire-label" data-a="' + e.from + '" data-b="' + e.to + '"><rect x="' + (lx - tw / 2) + '" y="' + (w.my - 10) + '" width="' + tw + '" height="20" rx="10"/><text x="' + lx + '" y="' + (w.my + 3.8) + '" text-anchor="middle">' + esc(txt) + '</text><title>' + esc(e.label) + '</title></g>';
+      }
+    });
+    html += '<svg class="wires" width="' + W + '" height="' + H + '"><defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--wire)"/></marker></defs>' + wires + labels + '</svg>';
+    tier.nodes.forEach((n) => {
+      const p = pos(n);
+      const st = n.status === "same" ? "" : '<span class="st">' + n.status.toUpperCase() + '</span>';
+      html += '<button class="node ' + n.status + '" data-id="' + n.id + '" style="left:' + p.x + 'px;top:' + p.y + 'px;width:' + NW + 'px;height:' + NH + 'px" aria-label="' + esc(n.label + ", " + n.status + ". Open details") + '">' +
+        '<span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+        '<span style="min-width:0;overflow:hidden"><span class="nm">' + esc(n.label) + '</span><span class="tc">' + esc(n.tech) + '</span></span>' + st + '</button>';
+    });
+    c.innerHTML = html;
+    c.querySelectorAll(".node").forEach((el) => {
+      el.addEventListener("click", () => openNode(el.dataset.id, el));
+      el.addEventListener("mouseenter", () => hot(el.dataset.id));
+      el.addEventListener("mouseleave", () => hot(null));
+      el.addEventListener("focus", () => hot(el.dataset.id));
+      el.addEventListener("blur", () => hot(null));
+    });
+  }
+
+  let dims = null;
+  function fit(W, H) {
+    if (W) dims = [W, H];
+    if (!dims) return;
+    const avail = $("cwrap").clientWidth;
+    const scale = Math.max(0.62, Math.min(1, avail / dims[0]));
+    $("canvas").style.transform = "scale(" + scale + ")";
+    $("cfit").style.width = dims[0] * scale + "px";
+    $("cfit").style.height = dims[1] * scale + "px";
+  }
+  window.addEventListener("resize", () => fit());
+
+  function hot(id) {
+    const c = $("canvas");
+    c.classList.toggle("hovering", !!id);
+    c.querySelectorAll(".hot").forEach((e) => e.classList.remove("hot"));
+    if (!id) return;
+    const linked = new Set([id]);
+    c.querySelectorAll("[data-a]").forEach((e) => {
+      if (e.dataset.a === id || e.dataset.b === id) { e.classList.add("hot"); linked.add(e.dataset.a); linked.add(e.dataset.b); }
+    });
+    c.querySelectorAll(".node").forEach((e) => { if (linked.has(e.dataset.id)) e.classList.add("hot"); });
+  }
+
+  function list(items) { return items && items.length ? '<ul>' + items.map((i) => '<li>' + esc(i) + '</li>').join("") + '</ul>' : ""; }
+
+  function openNode(id, from) {
+    const n = tier.nodes.find((x) => x.id === id);
+    if (!n) return;
+    if (from) opener = from;
+    const m = $("modal");
+    const statusText = { new: "New at " + tier.label, changed: "Changed at " + tier.label, same: "Unchanged at " + tier.label, removed: "Removed at " + tier.label }[n.status];
+    const conns = tier.edges.filter((e) => e.from === id || e.to === id).map((e) => {
+      const other = e.from === id ? e.to : e.from;
+      const o = tier.nodes.find((x) => x.id === other);
+      return o ? '<button class="conn" data-go="' + o.id + '">' + (e.from === id ? "→ " : "← ") + esc(o.label) + (e.label ? " · " + esc(e.label) : "") + '</button>' : "";
+    }).join("");
+    let body = '<div class="pills"><span class="pill ' + n.status + '">' + esc(statusText) + '</span>' + (n.cost ? '<span class="pill same">' + esc(n.cost) + '</span>' : "") + '</div>';
+    if (n.serves && n.serves.length) body += '<div class="sec"><h4>Why this problem needs it</h4><div class="serves">' + n.serves.map((r) => '<div><b>' + esc(r) + '</b>' + esc(reqText[r] || "") + '</div>').join("") + '</div></div>';
+    if (n.role) body += '<div class="sec"><h4>Role</h4><p>' + esc(n.role) + '</p></div>';
+    if (n.specifics && n.specifics.length) body += '<div class="sec"><h4>Specifics</h4>' + list(n.specifics) + '</div>';
+    if (n.tradeoffs && n.tradeoffs.length) body += '<div class="sec"><h4>Trade-offs</h4>' + list(n.tradeoffs) + '</div>';
+    const altSrc = n.alternatives != null ? n.alternatives : (DESIGN.tiers.slice(0, DESIGN.tiers.indexOf(tier)).reverse().map((t) => (t.nodes.find((x) => x.id === n.id) || {}).alternatives).find((a) => a != null));
+    body += '<div class="sec"><h4>Alternatives considered</h4>' + (Array.isArray(altSrc) && altSrc.length
+      ? '<div class="alts">' + altSrc.map((a) => '<div><strong>' + esc(a.what) + '</strong><span>' + esc(a.why) + '</span></div>').join("") + '</div>'
+      : '<p class="muted">' + esc(typeof altSrc === "string" && altSrc ? altSrc : "No alternatives were considered for this component.") + '</p>') + '</div>';
+    if (n.failures && n.failures.length) body += '<div class="sec"><h4>Failure modes</h4><div class="fail">' + n.failures.map((f) => '<div><strong>' + esc(f.mode) + '</strong><span>' + esc(f.mitigation) + '</span></div>').join("") + '</div></div>';
+    if (n.breaks) body += '<div class="next"><h4 class="eyebrow" style="margin:0">What breaks next</h4><p>' + esc(n.breaks) + '</p>' + (n.trigger ? '<p class="trigger">Trigger: ' + esc(n.trigger) + '</p>' : "") + '</div>';
+    if (conns) body += '<div class="sec"><h4>Connections</h4><div class="conns">' + conns + '</div></div>';
+    m.innerHTML = '<div class="m-head"><span class="ic" style="background:var(--z-' + n.zone + ');color:var(--z-' + n.zone + '-ink)">' + svgIcon(n.icon) + '</span>' +
+      '<div style="min-width:0"><h3 id="m-name">' + esc(n.label) + '</h3><div class="m-tech">' + esc(n.tech) + '</div></div>' +
+      '<button class="close" aria-label="Close details">' + CLOSE + '</button></div><div class="m-body">' + body + '</div>';
+    m.querySelector(".close").addEventListener("click", () => m.close());
+    m.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => openNode(b.dataset.go)));
+    if (!m.open) m.showModal();
+    m.querySelector(".close").focus();
+  }
+  $("modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $("modal").addEventListener("close", () => { if (opener && document.contains(opener)) opener.focus(); });
+
+  function cards() {
+    $("moves").innerHTML = tier.moves.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span>' + (x.driver ? '<span class="driver"><b>Driven by</b> ' + esc(x.driver) + '</span>' : "") + '<span class="trigger">Trigger: ' + esc(x.trigger) + '</span></li>').join("");
+    $("rejected").innerHTML = tier.rejected.map((x) => '<li><strong>' + esc(x.what) + '</strong><span class="muted">' + esc(x.why) + '</span></li>').join("");
+    const L = DESIGN.load;
+    $("load").innerHTML = '<tr><th></th>' + DESIGN.tiers.map((t) => '<th>' + esc(t.label) + '</th>').join("") + '</tr>' +
+      L.rows.map((r, i) => '<tr><td>' + esc(r) + '</td>' + DESIGN.tiers.map((t) => '<td class="num' + (t.id === tier.id ? " cur" : "") + '">' + esc(L.values[t.id][i]) + '</td>').join("") + '</tr>').join("");
+    $("load-note").textContent = L.note || "";
+  }
+
+  function show() {
+    const id = location.hash.slice(1);
+    tier = DESIGN.tiers.find((t) => t.id === id) || DESIGN.tiers[0];
+    DESIGN.tiers.forEach((t) => $("tab-" + t.id).setAttribute("aria-selected", String(t.id === tier.id)));
+    $("tier-title").textContent = tier.title;
+    $("tier-summary").textContent = tier.summary;
+    if ($("modal").open) $("modal").close();
+    $("canvas").classList.toggle("baseline", tier === DESIGN.tiers[0]); /* nothing changes at the first tier */
+    draw(); cards();
+  }
+  window.addEventListener("hashchange", show);
+  show();
+})();
+</script>
