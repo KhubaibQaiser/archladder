@@ -52,7 +52,8 @@ plans, test plans, and UI quality reviews. This skill owns the technical depth i
    becomes a question before any design work. Ask in this priority order:
    1. Scope and intent: conflicts with the brief, project scope rules or an accepted ADR. Ask these
       first, since the answer can make the rest moot.
-   2. One-way doors: data model, tenancy, residency, public contracts, auth, platform changes.
+   2. One-way doors: data model, tenancy, residency, public contracts, auth, platform changes,
+      and the stack itself when the project has none yet.
    3. The numbers that set the tier path: users, peaks and how they stack, read and write mix,
       connections, data growth, regions.
    4. Everything else that changes the design.
@@ -121,9 +122,17 @@ design page. For a small change, offer it in one line instead.
 
 **Tailor it to this problem only.** The page argues for one specific system, not a catalogue of good
 architecture. Build it only after the interview, from the ledger.
-- Use the project's real stack and platforms, with real products and settings ("Supavisor in
-  transaction mode", not "Cache"). Leaving the current stack is a decision for the user, never a
-  default.
+- Use the project's real stack and platforms, with real products and settings ("PgBouncer in
+  transaction mode", "a Redis cluster per region", not "Cache"). The skill has no preferred
+  vendor. Name whatever fits this project.
+- **Platform fit at every tier.** Start from the current stack, but at each tier ask whether each
+  platform is still the best fit at that load and profile. Staying is a claim like any other: when
+  it stays, add "stay on <platform>" to that tier's rejected list with the reason. When another
+  platform is clearly better, raise the switch as a decision with its exit cost and migration path.
+  Never switch silently and never stay by inertia.
+- **No default stack.** With no repo or no stated stack, ask the user for a stack preference in the
+  interview, with options from different vendors and a "recommend one" option. Never fill the gap
+  with a stack from the bundled example.
 - The workload profile drives every tier. Each move names the profile row or number that forces it
   (`driver`). A read-heavy CRM and a chat app with the same DAU get different designs.
 - Every node lists the requirements it serves. A node that serves no requirement and fixes no
@@ -144,7 +153,8 @@ available and cite them. Otherwise mark the number unverified in the page and un
 
 **Building it.**
 1. Copy `assets/system-design.html` and replace only the `DESIGN` object and the `<title>`. Keep the
-   CSS and script.
+   CSS and script. The template holds a stack-free skeleton. `examples/` shows filled pages for
+   format only. Their stacks belong to those projects.
 2. Fill `DESIGN` exactly as `references/design-schema.md` describes. Zone ids are fixed
    (`client`, `edge`, `app`, `data`, `services`), labels are free text.
 3. Order zones and rows so components that talk most sit next to each other. Aim for no more than

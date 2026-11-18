@@ -100,7 +100,7 @@ SKILL.md                      the skill
 references/lenses.md          the review lenses
 references/scaling.md         workload profile, tier maths, scaling playbook
 references/design-schema.md   the DESIGN object the page renders
-assets/system-design.html     the page template
+assets/system-design.html     the page template (stack-free skeleton)
 scripts/check-design.mjs      validates a generated page
 examples/                     finished design pages
 .claude-plugin/               plugin and marketplace manifests

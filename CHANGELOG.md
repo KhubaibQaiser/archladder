@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 (2026-11-18)
+
+- Platform fit at every tier: staying on a platform goes into the rejected list with a reason, and a
+  better-fitting platform is raised as a decision with its exit cost and migration path.
+- No default stack: with no repo or stated stack, the interview asks for a stack preference.
+- The page template is now a stack-free skeleton. Filled pages live in `examples/`.
+- Stack-neutral examples in the schema and scaling references, including RDS Proxy for pooling.
+
 ## 0.1.0 (2026-11-18)
 
 First public release.

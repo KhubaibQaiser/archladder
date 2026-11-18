@@ -8,7 +8,7 @@
 | Field | Type | Notes |
 |---|---|---|
 | `title` | string, required | Page heading. Use the same text in `<title>`. |
-| `stack` | string, required | The real stack, for example `"Next.js 16 on Vercel · Supabase"`. |
+| `stack` | string, required | The real stack, for example `"Rails on Fly.io · Postgres"` or `"Go on AWS ECS · DynamoDB"`. |
 | `problem` | string, required | One paragraph restating the problem. |
 | `requirements` | array, required | `{ id, text }`. Ids are `R1`, `R2` and so on, taken from the brief. |
 | `profile` | array, required | Workload profile rows, see below. |

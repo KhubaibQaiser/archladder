@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "archladder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Staff-level system design grounded in your repo: gathers context, interviews you instead of assuming, then climbs a 1k to 10M user ladder driven by your workload profile, with an interactive design page.",
   "author": {
     "name": "Khubaib Qaiser",
