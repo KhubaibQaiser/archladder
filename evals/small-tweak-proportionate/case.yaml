@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: small-tweak-proportionate
+expected_outcome: |
+  Stays proportionate to a small UI change: reads the existing search code, uses two or three lenses, gives a concrete recommendation, and does not produce a 1k to 10M DAU ladder or build a system design page (at most offers one in a line).
+context:
+  scaffold_script: clone-caseflow.sh

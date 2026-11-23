@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: greenfield-no-stack
+expected_outcome: |
+  With no repo and no stated stack, asks for a stack preference with options from different vendors instead of assuming one, profiles the workload (write-heavy location pings, two-way connections, regional), and designs tiers driven by that profile.

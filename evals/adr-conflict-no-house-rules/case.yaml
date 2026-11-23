@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: adr-conflict-no-house-rules
+expected_outcome: |
+  In a repo with no agent rules about ADRs, finds ADR-0004 (offset pagination, infinite scroll rejected), says the change reopens it and why, proposes a superseding ADR as a user decision, and stays proportionate (no 1k to 10M ladder for a one-screen change).
+context:
+  scaffold_script: place-files.sh
