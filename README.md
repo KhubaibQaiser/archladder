@@ -15,9 +15,9 @@ brief, a ticket or a problem, and it:
 3. **Profiles the workload.** Read-heavy or write-heavy, request and response or two-way
    connections, steady or bursty, single or multi-tenant, one region or global, data residency. Two
    systems with the same user count need different designs, and the profile is what decides.
-4. **Climbs the ladder.** Five tiers, 1k, 10k, 100k, 1M and 10M daily users. Each tier changes only
-   what the profile and the numbers force, names the trigger metric, and lists what was considered
-   and left out.
+4. **Climbs the ladder** when scale is in play. Five tiers, 1k, 10k, 100k, 1M and 10M daily users.
+   Each tier changes only what the profile and the numbers force, names the trigger metric, and
+   lists what was considered and left out.
 5. **Builds an interactive design page.** Clickable components with role, trade-offs, alternatives
    considered, failure modes and what breaks next, plus animated request and async flows, NEW, CHANGED and REMOVED badges, and
    light and dark themes. One self-contained HTML file.
@@ -113,8 +113,8 @@ you need to make. The detail follows, sized to the problem, so a small change ge
 4. Lens findings: concurrency, idempotency, security, front-end data, pagination vs virtualization,
    data model, real-time transport, scale
 5. Edge cases
-6. System design from 1k to 10M DAU, with a scale path table (only when scale is in play; a
-   one-screen change gets one line instead)
+6. System design from 1k to 10M DAU, with a scale path table (only when scale is in play. A
+   one-screen change gets one line instead.)
 7. Risks
 8. PR-sized deliverables with a dependency graph
 9. Decisions for you

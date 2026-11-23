@@ -4,4 +4,4 @@ focus: trace
 weight: 1
 ---
 
-questions.md has at most 10 questions
+The final reply is under 1,500 words

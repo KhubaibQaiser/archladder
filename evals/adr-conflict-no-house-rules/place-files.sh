@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-set -eu
+set -euo pipefail
 cp -R "$(dirname "$0")/files/." .

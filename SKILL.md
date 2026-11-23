@@ -1,6 +1,6 @@
 ---
 name: archladder
-description: Staff-level technical breakdown and system design for a brief, ticket, feature or engineering problem, grounded in the actual repo. Use when the user runs /archladder, or asks to break down, scope, pressure-test or design a feature or system, plan how it scales, or weigh concurrency, idempotency, consistency, security, real-time transport, caching, sharding or pagination vs virtualization. Gathers project context, interviews the user instead of assuming, designs tiers from 1k to 10M daily users driven by the workload profile, and builds an interactive system design page. Recommends, never decides, and changes no code.
+description: Staff-level technical breakdown and system design for a brief, ticket, feature or engineering problem, grounded in the actual repo. Use when the user runs /archladder, or asks to break down, scope, pressure-test or design a feature or system, plan how it scales, or weigh concurrency, idempotency, consistency, security, real-time transport, caching, sharding or pagination vs virtualization. Gathers project context, interviews the user instead of assuming, designs tiers from 1k to 10M daily users when scale matters, driven by the workload profile, and builds an interactive system design page. Recommends, never decides, and changes no code.
 argument-hint: "<brief, ticket link, file path or problem description>"
 ---
 
@@ -70,14 +70,14 @@ plans, test plans, and UI quality reviews. This skill owns the technical depth i
    each answer changes in each option's `description`, keep `header` within 12 characters, and send
    at most four questions per call ("Other" is added automatically). Without it, number the
    questions in plain text and end with "or tell me your own answer". Batch questions in rounds and
-   keep going until nothing design-changing is open. Reading the lenses (step 4) while writing
-   questions is fine. Good questions often need lens knowledge.
+   keep going until nothing design-changing is open, within the cap below. Reading the lenses
+   (step 4) while writing questions is fine. Good questions often need lens knowledge.
 
    Keep the interview short enough that people actually answer it. Most problems need one or two
-   rounds. When more than about eight questions qualify, keep the scope questions, the one-way
-   doors and the numbers that set the tier path, and turn the rest into stated assumptions under
-   "Still open". A long questionnaire gets skimmed, and skimmed answers are worse than assumptions
-   the user can see and correct.
+   rounds. When more than about eight questions qualify across all rounds, keep the scope
+   questions, the one-way doors and the numbers that set the tier path, and turn the rest into
+   stated assumptions under "Still open". A long questionnaire gets skimmed, and skimmed answers
+   are worse than assumptions the user can see and correct.
 
    If the user says "use your judgement" on an item, or the run can't finish the interview (a
    non-interactive run, or the user stops answering), continue with an explicit assumption. Mark
@@ -85,7 +85,9 @@ plans, test plans, and UI quality reviews. This skill owns the technical depth i
 
 4. **Pick the lenses.** Read `references/lenses.md` and choose the ones that matter. Say in one line
    why the others are skipped. A small UI tweak gets two lenses, a new sync feature gets most.
-   Proportionality is the point.
+   Proportionality is the point. Pick the scale lens for new infrastructure, new data flows,
+   load-sensitive paths, or a brief that asks about growth. It decides whether the output climbs
+   the 1k to 10M ladder.
 
 5. **Work the lenses** and produce the output below.
 
@@ -109,11 +111,10 @@ adds nothing for this problem. Length is a cost the user pays, so a small change
    go in section 5, not here.
 5. **Edge cases:** one table of concrete inputs or conditions and the behaviour a reasonable user
    would expect (this is where the edge-case lens lands).
-6. **System design from 1k to 10M DAU,** only when the scale lens is in play: new infrastructure,
-   new data flows, load-sensitive paths, or a brief that asks about growth. For a change confined
-   to one screen or to existing data paths, replace this section with one line that names the load
-   that would force a redesign, or says none would. Otherwise follow `references/scaling.md`. Turn each tier's DAU into
-   the numbers that matter for this workload, design the first tier to ship now, and for each later
+6. **System design from 1k to 10M DAU,** only when step 4 picked the scale lens. Otherwise replace
+   this section with one line that names the load that would force a redesign, or says none would.
+   With the ladder, follow `references/scaling.md`. Turn each tier's DAU into the numbers that
+   matter for this workload, design the first tier to ship now, and for each later
    tier list what changes, why, which profile row or number forces it, and the trigger metric. Then
    the scale path summary:
 
@@ -132,7 +133,8 @@ adds nothing for this problem. Length is a cost the user pays, so a small change
 ## System design page
 
 When the problem has several components or the scale lens is in play, build an interactive system
-design page. For a small change, offer it in one line instead.
+design page. For a small change, offer it in one line instead. Without the scale lens, the page
+shows only the design to ship now, as a single tier.
 
 **Tailor it to this problem only.** The page argues for one specific system, not a catalogue of good
 architecture. Build it only after the interview, from the ledger.
