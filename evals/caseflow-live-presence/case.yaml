@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: caseflow-live-presence
+expected_outcome: |
+  Reads the Caseflow repo first and cites path:line in a context ledger, builds on ADR-0011 (designed change feed) instead of ignoring it, asks design-changing questions before designing, and produces tiers from 1k to 10M DAU plus a system design page that passes the checker.
+context:
+  scaffold_script: clone-caseflow.sh

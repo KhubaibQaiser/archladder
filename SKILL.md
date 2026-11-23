@@ -73,6 +73,12 @@ plans, test plans, and UI quality reviews. This skill owns the technical depth i
    keep going until nothing design-changing is open. Reading the lenses (step 4) while writing
    questions is fine. Good questions often need lens knowledge.
 
+   Keep the interview short enough that people actually answer it. Most problems need one or two
+   rounds. When more than about eight questions qualify, keep the scope questions, the one-way
+   doors and the numbers that set the tier path, and turn the rest into stated assumptions under
+   "Still open". A long questionnaire gets skimmed, and skimmed answers are worse than assumptions
+   the user can see and correct.
+
    If the user says "use your judgement" on an item, or the run can't finish the interview (a
    non-interactive run, or the user stops answering), continue with an explicit assumption. Mark
    the affected decision "assumption: flips if <answer>" and list it under "Still open".
@@ -85,7 +91,12 @@ plans, test plans, and UI quality reviews. This skill owns the technical depth i
 
 ## Output
 
-Use these sections, dropping any that are empty for this problem.
+Open with a **summary** of about 150 words: the recommendation, the one or two facts that drive
+it, and the decisions the user has to make. Someone who reads only the summary should be able to
+act on it. The sections below are the evidence behind it.
+
+Then use these sections, each as short as the problem allows. Drop any section that is empty or
+adds nothing for this problem. Length is a cost the user pays, so a small change gets a short reply.
 
 1. **Problem, ledger and profile:** the restatement, the context ledger and the workload profile.
 2. **Options:** two or three real approaches, the trade-offs, and the recommendation with the reason
@@ -98,7 +109,10 @@ Use these sections, dropping any that are empty for this problem.
    go in section 5, not here.
 5. **Edge cases:** one table of concrete inputs or conditions and the behaviour a reasonable user
    would expect (this is where the edge-case lens lands).
-6. **System design from 1k to 10M DAU:** follow `references/scaling.md`. Turn each tier's DAU into
+6. **System design from 1k to 10M DAU,** only when the scale lens is in play: new infrastructure,
+   new data flows, load-sensitive paths, or a brief that asks about growth. For a change confined
+   to one screen or to existing data paths, replace this section with one line that names the load
+   that would force a redesign, or says none would. Otherwise follow `references/scaling.md`. Turn each tier's DAU into
    the numbers that matter for this workload, design the first tier to ship now, and for each later
    tier list what changes, why, which profile row or number forces it, and the trigger metric. Then
    the scale path summary:

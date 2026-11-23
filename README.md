@@ -104,13 +104,17 @@ Expect a round or two of questions before any design. That's the point.
 
 ## What you get
 
+A summary of about 150 words comes first: the recommendation, what drives it, and the decisions
+you need to make. The detail follows, sized to the problem, so a small change gets a short reply:
+
 1. Problem, context ledger and workload profile
 2. Options, with one-way and two-way doors marked
 3. Library comparison
 4. Lens findings: concurrency, idempotency, security, front-end data, pagination vs virtualization,
    data model, real-time transport, scale
 5. Edge cases
-6. System design from 1k to 10M DAU, with a scale path table
+6. System design from 1k to 10M DAU, with a scale path table (only when scale is in play; a
+   one-screen change gets one line instead)
 7. Risks
 8. PR-sized deliverables with a dependency graph
 9. Decisions for you
@@ -127,6 +131,7 @@ references/scaling.md         workload profile, tier maths, scaling playbook
 references/design-schema.md   the DESIGN object the page renders
 assets/system-design.html     the page template (stack-free skeleton)
 scripts/check-design.mjs      validates a generated page
+evals/                        test cases for `claude plugin eval`
 examples/                     example briefs and the pages they produced
 docs/                         the GitHub Pages site and README screenshots
 .claude-plugin/               plugin and marketplace manifests

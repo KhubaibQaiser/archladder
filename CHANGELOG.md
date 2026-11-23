@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Every reply opens with a summary of about 150 words: the recommendation, what drives it, and the
+  decisions needed. Sections are sized to the problem.
+- The 1k to 10M ladder runs only when scale is in play. A change confined to one screen or to
+  existing data paths gets one line naming the load that would force a redesign.
+- The interview is capped: past about eight questions, low-impact unknowns become stated
+  assumptions under "Still open".
+- Evals in `evals/`: four cases (repo-grounded design, greenfield with no stack, a small tweak, and
+  an ADR conflict in a fixture repo), runnable with `claude plugin eval`.
+
 ## 0.2.0 (2026-11-18)
 
 - Platform fit at every tier: staying on a platform goes into the rejected list with a reason, and a
